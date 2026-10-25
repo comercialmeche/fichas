@@ -247,6 +247,15 @@ const PROMEDIOS = {
     etiquetas:{ok:{i:"", t:"Mantener"}, warn:{i:"", t:"Mejorar montos"}, bad:{i:"", t:"Montos bajos"}}}
 };
 const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
+/* Columna «vs. corte ant.»: diferencia + valor de la entrega anterior (o solo el valor anterior si todavía no se cargó el nuevo) */
+function compAnt(k, sem, ant){
+  if (!ant || ant.ind[k.id] == null) return null;
+  if (k.t === "mes" && mesDe(ant.fecha) !== mesDe(sem.fecha)) return null;
+  const av = ant.ind[k.id], v = sem.ind[k.id], antTxt = "ant. " + fmtNum(av, k.money);
+  if (v == null) return {html:`<span class="why">${antTxt}</span>`, txt:antTxt};
+  const d = v - av, dTxt = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
+  return {html:`${dTxt} <span class="why">(${antTxt})</span>`, txt:`${dTxt} (${antTxt})`};
+}
 /* Calcula lo que va en las columnas Objetivo y Cumpl. para un indicador */
 function evalInd(k, sem, ob, ant){
   const v = sem.ind[k.id];
@@ -325,9 +334,7 @@ let saveTimer = null, unsaved = false;
 function nuevaSemana(fecha, rol, previa){
   const ind = {};
   ROLES[rol].ind.forEach(k => {
-    if (!previa) ind[k.id] = null;
-    else if (k.t === "stock") ind[k.id] = previa.ind[k.id] ?? null;                 // stock: se mantiene
-    else ind[k.id] = null;   // producción del mes: se vuelve a cargar en cada entrega (la anterior queda como referencia en «vs. sem. ant.»)
+    ind[k.id] = null;   // producción y stock se vuelven a cargar en cada entrega (la anterior queda como referencia en «vs. corte ant.»)
   });
   const pendientes = previa ? [
     ...previa.compromisosPrevios.filter(c => c.estado !== "Cumplido").map(c => ({texto:c.texto, fecha:c.fecha, resultado:c.resultado, desde:c.desde, estado:"", explicacion:""})),
@@ -427,10 +434,7 @@ function renderActual(){
   const mismoMes = ant && mesDe(ant.fecha) === mesDe(a.fecha);
   const fila = k => {
     const v = a.ind[k.id], E = evalInd(k, a, ob, ant);
-    let delta = "–";
-    if (ant && ant.ind[k.id] != null && v != null && (k.t === "stock" || mismoMes)){
-      const d = v - ant.ind[k.id]; delta = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
-    }
+    const C = compAnt(k, a, ant), delta = C ? C.html : "–";
     return `<tr>
       <td class="name">${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}${k.shared?'<span class="shared">Resultado compartido</span>':''}<small>${esc(k.d)}</small></td>
       ${k.t==="mes" ? `<td class="n" data-obj="${k.id}">${E.objHtml}</td>` : ""}
@@ -475,10 +479,10 @@ function renderActual(){
   <section class="panel">
     <h2><span class="tag">A</span>Indicadores</h2>
     <h3>Producción del mes · acumulado del 1/${mesDe(a.fecha).slice(5)} al ${fmtFecha(a.fecha)}</h3>
-    <p class="hint">Cargá el acumulado del mes a la fecha de corte (no lo de la semana sola). En cada entrega se vuelve a cargar; el valor anterior queda como referencia en «vs. sem. ant.». El stock se mantiene de una entrega a otra.</p>
-    <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Acumulado</th><th class="n">Cumpl.</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${mes.map(fila).join("")}</tbody></table></div>
+    <p class="hint">Cargá el acumulado del mes a la fecha de corte (no lo de la semana sola). En cada entrega se vuelve a cargar; el valor anterior queda como referencia en «vs. corte ant.».</p>
+    <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Acumulado</th><th class="n">Cumpl.</th><th class="n">vs. corte ant.</th></tr></thead><tbody>${mes.map(fila).join("")}</tbody></table></div>
     <h3>Estado actual · foto al ${fmtFecha(a.fecha)}</h3>
-    <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Cantidad hoy</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${stock.map(fila).join("")}</tbody></table></div>
+    <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Cantidad hoy</th><th class="n">vs. corte ant.</th></tr></thead><tbody>${stock.map(fila).join("")}</tbody></table></div>
     ${r.extra ? `<label class="f">${esc(r.extra.n)}<textarea data-x="extra" placeholder="${esc(r.extra.ph)}">${esc(a.extra)}</textarea></label>` : ""}
   </section>
 
@@ -567,7 +571,7 @@ function refreshIndicador(id){
   const pc = document.querySelector(`[data-pct="${id}"]`); if (pc) pc.innerHTML = E.cumHtml;
   const oc = document.querySelector(`[data-obj="${id}"]`); if (oc) oc.innerHTML = E.objHtml;
   const dc = document.querySelector(`[data-delta="${id}"]`);
-  if (dc){ const ok = ant && ant.ind[id]!=null && v!=null && (k.t==="stock" || mesDe(ant.fecha)===mesDe(a.fecha)); const d = ok ? v-ant.ind[id] : null; dc.textContent = d==null ? "–" : (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); }
+  if (dc){ const C = compAnt(k, a, ant); dc.innerHTML = C ? C.html : "–"; }
 }
 function cambiarFecha(e){
   const v = e.target.value, a = S.actual;
@@ -635,14 +639,14 @@ function construirPDF(sem, version){
   let y = 38;
   const titulo = t => { if (y > 245){ doc.addPage(); y = 18; } doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...verde); doc.text(t, M, y); doc.setTextColor(20); y += 3; };
   const tabla = (head, body, opts={}) => { doc.autoTable(Object.assign({head:[head], body, startY:y, margin:{left:M,right:M}, styles:{fontSize:9, cellPadding:1.8, overflow:"linebreak", valign:"top"}, headStyles:{fillColor:[233,241,236], textColor:[30,50,40], fontStyle:"bold"}, theme:"grid", rowPageBreak:"avoid"}, opts)); y = doc.lastAutoTable.finalY + 8; };
-  const dlt = k => { if (!(ant && ant.ind[k.id]!=null && sem.ind[k.id]!=null && (k.t==="stock"||mismoMes))) return "–"; const d = sem.ind[k.id]-ant.ind[k.id]; return (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); };
+  const dlt = k => { const C = compAnt(k, sem, ant); return C ? C.txt : "–"; };
   const nota = k => (k.pend?" [definición pendiente]":"")+(k.shared?" [resultado compartido]":"");
 
   titulo("A. Producción del mes (acumulado a la fecha de corte)");
-  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, fmtNum(sem.ind[k.id],k.money), E.cum, dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}},
+  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. corte ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, fmtNum(sem.ind[k.id],k.money), E.cum, dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}},
     didParseCell: d => { if (d.section==="body" && d.column.index===3){ const t=String(d.cell.raw); const c = ["Bien","Mantener"].includes(t)||t.startsWith("Sube")?[15,122,61]:["Regular","Mejorar montos"].includes(t)?[143,91,0]:["Mal","Montos bajos"].includes(t)||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } }});
   titulo("A. Estado actual (stock a la fecha de corte)");
-  tabla(["Indicador","Cantidad","vs. sem. ant."], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money), dlt(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
+  tabla(["Indicador","Cantidad","vs. corte ant."], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money), dlt(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
   if (r.extra && sem.extra.trim()){ titulo(r.extra.n); tabla(["Detalle"], [[sem.extra]]); }
   const opps = sem.oportunidades.filter(o=>o.nombre.trim());
   titulo("B. Oportunidades prioritarias");
@@ -690,7 +694,7 @@ function pedirCierre(){
   const prox = proximoCorte(S.actual.fecha), cambiaMes = mesDe(prox) !== mesDe(S.actual.fecha);
   modal(`<h2>Cerrar semana del ${fmtFecha(S.actual.fecha)}</h2>
     ${f.length ? `<p class="banner warn">Quedan datos sin completar: ${esc(f.join(" · "))}. Podés cerrar igual; van a figurar así en el PDF.</p>` : ""}
-    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara la entrega del ${fmtFecha(prox)}${esCierreDeMes(prox) ? " (último día hábil del mes: cierre de mes)" : ""}. La producción del mes queda vacía para volver a cargarla${cambiaMes ? " (empieza un mes nuevo)" : ""} y el stock se mantiene.</p>
+    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara la entrega del ${fmtFecha(prox)}${esCierreDeMes(prox) ? " (último día hábil del mes: cierre de mes)" : ""}. Los indicadores quedan vacíos para volver a cargarlos${cambiaMes ? " (empieza un mes nuevo)" : ""}; los valores de esta entrega quedan como referencia.</p>
     <p class="hint">La ficha no puede comprobar que el archivo se haya guardado ni que lo hayas enviado.</p>
     <label class="check"><input type="checkbox" id="m-ok"> Ya envié el PDF a Gerencia Comercial.</label>`,
     [{t:"Cancelar", c:"ghost"}, {t:"Cerrar semana", c:"primary", id:"m-confirm", disabled:true, f:cerrar}],
