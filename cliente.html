@@ -157,12 +157,12 @@ details.sec summary{cursor:pointer;font:700 16px var(--display)}
 const OBJETIVOS = {
   "2026-10": {
     cliente: { solicitudes: 100, carpetas_completadas: 40, volumen: 1600 },
-    partner: { solicitudes_canal: 100, carpetas_canal: 40, volumen_canal: 1600 }
+    partner: { solicitudes: 100, carpetas_completadas: 40, volumen: 1600 }
   }
 };
 // Volumen: siempre en MILLONES de pesos (1600 = $ 1.600 M).
 // Además del objetivo por rol, se puede cargar uno por persona: "2026-11": { cliente: {...}, "Nombre Apellido": { carpetas_completadas: 45 } }
-const APP_VERSION = "1.11 · 25/10/2026";
+const APP_VERSION = "1.13 · 25/10/2026";
 
 /* ================= DEFINICIÓN DE ROLES ================= */
 // t: "mes" = producción acumulada del mes (día 1 al jueves de corte) · "stock" = foto del estado actual
@@ -192,18 +192,7 @@ const ROLES = {
   partner: {
     nombre: "Ejecutivo Partner",
     principal: "altas_partners",
-    nota: "Los clientes publican las solicitudes; acá se mide el desarrollo del canal y la actividad de los clientes vinculados.",
-    ind: [
-      {id:"altas_partners", n:"Altas de Partners", d:"En el mes", t:"mes", obj:true},
-      {id:"partners_con_solicitudes", n:"Partners con clientes que publicaron solicitudes", d:"En el mes", t:"mes"},
-      {id:"solicitudes_canal", n:"Solicitudes publicadas por clientes de Partners", d:"En el mes · atribución al canal, no a la carga", t:"mes", obj:true},
-      {id:"carpetas_canal", n:"Carpetas completadas de clientes de Partners", d:"En el mes", t:"mes", obj:true},
-      {id:"volumen_canal", n:"Volumen transaccional del canal (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M", shared:true},
-      {id:"operaciones_canal", n:"Cantidad de operaciones instrumentadas del canal", d:"En el mes · el promedio es volumen / operaciones", t:"mes", shared:true, prom:"ticketCanal"},
-      {id:"partners_totales", n:"Partners totales", d:"Estado actual", t:"stock"},
-      {id:"partners_activos", n:"Partners activos", d:"Estado actual", t:"stock", pend:true},
-      {id:"partners_operativos", n:"Partners operativos", d:"Estado actual", t:"stock", pend:true}
-    ],
+    ind: [],   // se arma abajo: los mismos indicadores de Clientes + Altas de Partners + stock de Partners
     rev: {
       autonomia:"¿Qué gestionaste solo con los Partners y qué necesitaste escalar?",
       organizacion:"Agenda de visitas, seguimiento de altas y de clientes del canal.",
@@ -249,15 +238,23 @@ const PROMEDIOS = {
 };
 const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
 /* Columna «vs. corte ant.»: diferencia + valor de la entrega anterior (o solo el valor anterior si todavía no se cargó el nuevo) */
+const MAX_HISTORICO = 10;
+function agregarHistorico(sem, c){
+  sem.eliminados = sem.eliminados || [];
+  sem.eliminados.push(Object.assign(c, {eliminadoEl: isoLocal(new Date()), eliminadoAt: new Date().toISOString(), estadoAlEliminar: c.estado || "Sin estado"}));
+  sem.eliminados.sort((x,y) => String(x.eliminadoAt||x.eliminadoEl).localeCompare(String(y.eliminadoAt||y.eliminadoEl)));
+  while (sem.eliminados.length > MAX_HISTORICO) sem.eliminados.shift();   // sale el que se eliminó primero
+}
+const historicoOrdenado = sem => [...(sem.eliminados || [])].sort((x,y) => String(y.eliminadoAt||y.eliminadoEl).localeCompare(String(x.eliminadoAt||x.eliminadoEl)));
 function bajas(sem, ant){
   if (!ant) return [];
   return ROLES[S.perfil.rol].ind.filter(k => { const C = compAnt(k, sem, ant); return C && C.baja; });
 }
 function compAnt(k, sem, ant){
   if (!ant || ant.ind[k.id] == null) return null;
+  if (k.t === "mes" && mesDe(ant.fecha) !== mesDe(sem.fecha)) return null;   // mes nuevo: la producción arranca de cero, no se compara
   const av = ant.ind[k.id], v = sem.ind[k.id], antTxt = "ant. " + fmtNum(av, k.money);
   if (v == null) return {html:`<span class="why">${antTxt}</span>`, txt:antTxt};
-  if (k.t === "mes" && mesDe(ant.fecha) !== mesDe(sem.fecha)) return {html:`<span class="why">${antTxt} · mes anterior</span>`, txt:`${antTxt} (mes anterior)`};
   const d = v - av;
   if (k.t === "mes" && d < 0){   // un acumulado del mes no puede bajar
     const dTxt0 = fmtNum(d, k.money).replace("$ -","-$ ");
@@ -292,6 +289,14 @@ function evalInd(k, sem, ob, ant){
   return {obj: o!=null ? fmtNum(o,k.money) : "sin cargar", objHtml: o!=null ? fmtNum(o,k.money) : '<span class="why">sin cargar</span>',
           cum: p!=null ? p+"%" : "–", cumHtml: p!=null ? `<span class="pill ${pclass(p)}">${p}%</span>` : "–"};
 }
+ROLES.partner.ind = [
+  {id:"altas_partners", n:"Altas de Partners", d:"En el mes", t:"mes", obj:true},
+  ...ROLES.cliente.ind.filter(k => k.t === "mes"),
+  ...ROLES.cliente.ind.filter(k => k.t === "stock"),
+  {id:"partners_totales", n:"Partners totales", d:"Estado actual", t:"stock"},
+  {id:"partners_activos", n:"Partners activos", d:"Estado actual", t:"stock", pend:true},
+  {id:"partners_operativos", n:"Partners operativos", d:"Estado actual", t:"stock", pend:true}
+];
 const REV_LABELS = {autonomia:"Autonomía", organizacion:"Organización", tecnico:"Conocimiento técnico", negociacion:"Negociación", seguimiento:"Seguimiento"};
 const ETAPAS = ["Prospecto","Solicitud publicada","Carpeta en armado","Carpeta completa","En análisis de inversor","Oferta","En instrumentación","Otra"];
 const AREAS = ["Gerencia","Mesa de Inversores","Operaciones","Desarrollo","Otra"];
@@ -358,7 +363,7 @@ function nuevaSemana(fecha, rol, previa){
     oportunidades: previa ? clone(previa.oportunidades) : Array.from({length:5}, () => ({nombre:"",monto:null,etapa:"",bloqueo:"",accion:"",responsable:"",fecha:""})),
     balance: {logro:"", accionLogro:"", noAvanzo:"", causa:"", distinto:"", habilidad:""},
     compromisosPrevios: pendientes,
-    eliminados: previa ? clone(previa.eliminados || []) : [],   // eliminados sin estar cumplidos: visibles para Gerencia
+    eliminados: previa ? clone(previa.eliminados || []) : [],   // histórico de compromisos eliminados (máx. 10, sale el más viejo)
     compromisosNuevos: Array.from({length:3}, () => ({accion:"",fecha:"",resultado:""})),
     apoyo: Array.from({length:3}, () => ({area:"",detalle:""})),
     revision: {autonomia:"",organizacion:"",tecnico:"",negociacion:"",seguimiento:""},
@@ -476,12 +481,12 @@ function renderActual(){
       <td><input data-cp="${i}.explicacion" value="${esc(c.explicacion)}" placeholder="Explicación breve"></td>
       <td><button class="ghost" style="padding:6px 10px" data-del-cp="${i}">Eliminar</button></td></tr>`).join("")
     : `<tr><td colspan="5" class="why">No hay compromisos anteriores. Se cargan solos cuando cerrás una semana y quedan acá hasta que los elimines.</td></tr>`;
-  const elim = (a.eliminados || []);
-  const elimRows = elim.map((c,i) => `<tr>
-      <td>${esc(c.texto)}<small class="why" style="display:block">Asumido el ${fmtFecha(c.desde)} · eliminado el ${fmtFecha(c.eliminadoEl)} con estado «${esc(c.estadoAlEliminar || "Sin estado")}»</small></td>
+  const elim = historicoOrdenado(a);
+  const elimRows = elim.map(c => `<tr>
+      <td>${esc(c.texto)}<small class="why" style="display:block">Asumido el ${fmtFecha(c.desde)}${c.explicacion?` · ${esc(c.explicacion)}`:""}</small></td>
       <td class="n">${fmtFecha(c.fecha) || "–"}</td>
-      <td><select data-el="${i}"><option value="">Sin estado</option>${ESTADOS_COMP.map(e=>`<option ${c.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
-      <td>${CERRADO(c.estado) ? `<button class="ghost" style="padding:6px 10px" data-del-el="${i}">Eliminar</button>` : ""}</td></tr>`).join("");
+      <td class="n">${fmtFecha(c.eliminadoEl) || "–"}</td>
+      <td><span class="pill ${c.estadoAlEliminar==="Cumplido"?"ok":c.estadoAlEliminar==="No es posible cumplir"||!c.estadoAlEliminar||c.estadoAlEliminar==="Sin estado"?"bad":"warn"}">${esc(c.estadoAlEliminar || "Sin estado")}</span></td></tr>`).join("");
   const nuevos = a.compromisosNuevos.map((c,i) => `<tr>
       <td><input data-cn="${i}.accion" value="${esc(c.accion)}" placeholder="Acción específica"></td>
       <td><input data-cn="${i}.fecha" type="date" value="${esc(c.fecha)}"></td>
@@ -533,11 +538,11 @@ function renderActual(){
 
   <section class="panel">
     <h2><span class="tag">D</span>Compromisos anteriores</h2>
-    <p class="hint">Quedan acá, semana a semana, hasta que los elimines. Si eliminás uno que no está cumplido, pasa al listado de abajo.</p>
+    <p class="hint">Quedan acá, semana a semana, hasta que los elimines. Todo compromiso eliminado pasa al histórico.</p>
     <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th>Explicación</th><th></th></tr></thead><tbody>${prev}</tbody></table></div>
-    ${elim.length ? `<h3>Compromisos eliminados no cumplidos</h3>
-    <p class="hint">Se eliminaron sin estar cumplidos.</p>
-    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th></th></tr></thead><tbody>${elimRows}</tbody></table></div>` : ""}
+    ${elim.length ? `<h3>Histórico de compromisos</h3>
+    <p class="hint">Últimos 10 compromisos eliminados, del más reciente al más antiguo. Al eliminar el número 11 sale el que se eliminó primero.</p>
+    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha comprometida</th><th class="n">Eliminado</th><th>Estado al eliminar</th></tr></thead><tbody>${elimRows}</tbody></table></div>` : ""}
   </section>
 
   <section class="panel">
@@ -590,7 +595,6 @@ function onEdit(e){
   }
   else if (t.dataset.o){ const [i,f] = t.dataset.o.split("."); if (f==="monto"){ const v=num(t.value); if (v!=null&&(isNaN(v)||v<0)){t.classList.add("err");return;} t.classList.remove("err"); a.oportunidades[i][f]=v; } else a.oportunidades[i][f]=t.value; }
   else if (t.dataset.b) a.balance[t.dataset.b] = t.value;
-  else if (t.dataset.el !== undefined){ a.eliminados[t.dataset.el].estado = t.value; if (e.type === "change"){ persist(); renderActual(); } return; }
   else if (t.dataset.cp){ const [i,f] = t.dataset.cp.split("."); a.compromisosPrevios[i][f] = t.value; }
   else if (t.dataset.cn){ const [i,f] = t.dataset.cn.split("."); a.compromisosNuevos[i][f] = t.value; }
   else if (t.dataset.ap){ const [i,f] = t.dataset.ap.split("."); a.apoyo[i][f] = t.value; }
@@ -637,7 +641,7 @@ function renderAnterior(){
   const ind = r.ind.map(k => { const E = evalInd(k, s, ob, null), av = s.ind[k.id], cv = act.ind[k.id];
     let dif = '<span class="why">sin cargar</span>';
     if (cv != null && av != null){
-      if (k.t === "mes" && mesDe(act.fecha) !== mesDe(s.fecha)) dif = '<span class="why">otro mes</span>';
+      if (k.t === "mes" && mesDe(act.fecha) !== mesDe(s.fecha)) dif = "–";
       else { const d = cv - av; dif = `<span class="pill ${d>0?"ok":d<0?"bad":"neutral"}">${d>0?"↑ +":d<0?"↓ ":"= "}${fmtNum(d,k.money).replace("$ -","-$ ")}</span>`; }
     }
     return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${esc(k.d)}</small></td>
@@ -654,7 +658,7 @@ function renderAnterior(){
       <dt>No avanzó</dt><dd>${esc(B.noAvanzo)||"–"}</dd><dt>Causa</dt><dd>${esc(B.causa)||"–"}</dd>
       <dt>Qué haría distinto</dt><dd>${esc(B.distinto)||"–"}</dd><dt>Habilidad a desarrollar</dt><dd>${esc(B.habilidad)||"–"}</dd></dl>
     <h3>Compromisos anteriores</h3><dl>${s.compromisosPrevios.map(c=>`<dt>${esc(c.estado||"Sin estado")}</dt><dd>${esc(c.texto)}${c.explicacion?` — ${esc(c.explicacion)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
-    ${(s.eliminados||[]).length ? `<h3>Compromisos eliminados no cumplidos</h3><dl>${s.eliminados.map(c=>`<dt>${esc(c.estado||"Sin estado")}</dt><dd>${esc(c.texto)} <span class="why">(eliminado el ${fmtFecha(c.eliminadoEl)})</span></dd>`).join("")}</dl>` : ""}
+    ${(s.eliminados||[]).length ? `<h3>Histórico de compromisos</h3><dl>${historicoOrdenado(s).map(c=>`<dt>${esc(c.estadoAlEliminar||"Sin estado")}</dt><dd>${esc(c.texto)} <span class="why">(eliminado el ${fmtFecha(c.eliminadoEl)})</span></dd>`).join("")}</dl>` : ""}
     <h3>Compromisos asumidos</h3><dl>${s.compromisosNuevos.filter(c=>c.accion.trim()).map(c=>`<dt>${fmtFecha(c.fecha)||"Sin fecha"}</dt><dd>${esc(c.accion)}${c.resultado?` → ${esc(c.resultado)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
     <h3>Apoyo requerido</h3><dl>${s.apoyo.filter(x=>x.detalle.trim()).map(x=>`<dt>${esc(x.area||"–")}</dt><dd>${esc(x.detalle)}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>`;
 }
@@ -701,7 +705,7 @@ function construirPDF(sem, version){
   tabla(["Tema","Respuesta"], [["Principal logro",B.logro],["Acción que lo produjo",B.accionLogro],["Oportunidad que no avanzó",B.noAvanzo],["Causa",B.causa],["Qué podría haber hecho distinto",B.distinto],["Habilidad a desarrollar",B.habilidad]].map(([a,b])=>[a,b.trim()||"–"]), {columnStyles:{0:{cellWidth:52,fontStyle:"bold"}}});
   titulo("D. Compromisos anteriores");
   tabla(["Compromiso","Asumido","Fecha","Estado","Explicación"], sem.compromisosPrevios.length ? sem.compromisosPrevios.map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", c.estado||"Sin estado", c.explicacion||"–"]) : [["No hay compromisos anteriores","","","",""]]);
-  if ((sem.eliminados || []).length){ titulo("D. Compromisos eliminados no cumplidos"); tabla(["Compromiso","Asumido","Eliminado","Estado al eliminar","Estado actual"], sem.eliminados.map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.eliminadoEl)||"–", c.estadoAlEliminar||"Sin estado", c.estado||"Sin estado"]), {headStyles:{fillColor:[248,222,219], textColor:[120,30,25], fontStyle:"bold"}}); }
+  if ((sem.eliminados || []).length){ titulo("D. Histórico de compromisos (últimos 10 eliminados)"); tabla(["Compromiso","Asumido","Fecha comprometida","Eliminado","Estado al eliminar"], historicoOrdenado(sem).map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", fmtFecha(c.eliminadoEl)||"–", c.estadoAlEliminar||"Sin estado"])); }
   const nv = sem.compromisosNuevos.filter(c=>c.accion.trim());
   titulo("E. Compromisos nuevos");
   tabla(["Acción","Fecha","Resultado esperado"], nv.length ? nv.map(c=>[c.accion, fmtFecha(c.fecha)||"–", c.resultado||"–"]) : [["Sin compromisos nuevos","",""]]);
@@ -860,23 +864,11 @@ $("v-actual").addEventListener("click", e => {
     if (vacia) quitar(); else modal(`<h2>Quitar fila</h2><p>Se borra lo que escribiste en esta fila.</p>`, [{t:"Cancelar",c:"ghost"},{t:"Quitar",c:"primary",f:quitar}]);
     return;
   }
-  const dcp = e.target.closest("[data-del-cp]"), del = e.target.closest("[data-del-el]");
+  const dcp = e.target.closest("[data-del-cp]");
   if (dcp){
     const i = Number(dcp.dataset.delCp), c = S.actual.compromisosPrevios[i];
-    if (CERRADO(c.estado)){
-      modal(`<h2>Eliminar compromiso</h2><p>«${esc(c.texto)}» está marcado como «${esc(c.estado)}» y se va a eliminar de la ficha.</p>`,
-        [{t:"Cancelar",c:"ghost"},{t:"Eliminar",c:"primary",f:()=>{ S.actual.compromisosPrevios.splice(i,1); persist(); renderActual(); }}]);
-    } else {
-      modal(`<h2>Eliminar compromiso no cumplido</h2><p>«${esc(c.texto)}» no está marcado como cumplido (estado: ${esc(c.estado || "sin estado")}).</p><p>Va a pasar al listado de <b>compromisos eliminados no cumplidos</b>, que se ve en la ficha y en el PDF.</p>`,
-        [{t:"Cancelar",c:"ghost"},{t:"Eliminar igual",c:"primary",f:()=>{ const x = S.actual.compromisosPrevios.splice(i,1)[0]; S.actual.eliminados = S.actual.eliminados || []; S.actual.eliminados.push(Object.assign(x, {eliminadoEl: isoLocal(new Date()), estadoAlEliminar: x.estado || "Sin estado"})); persist(); renderActual(); }}]);
-    }
-    return;
-  }
-  if (del){
-    const i = Number(del.dataset.delEl), c = S.actual.eliminados[i];
-    if (!CERRADO(c.estado)) return;
-    modal(`<h2>Eliminar definitivamente</h2><p>«${esc(c.texto)}» quedó marcado como «${esc(c.estado)}» y se va a borrar del listado.</p>`,
-      [{t:"Cancelar",c:"ghost"},{t:"Eliminar",c:"primary",f:()=>{ S.actual.eliminados.splice(i,1); persist(); renderActual(); }}]);
+    modal(`<h2>Eliminar compromiso</h2><p>«${esc(c.texto)}» (estado: ${esc(c.estado || "sin estado")}) sale de la lista y pasa al <b>histórico de compromisos</b>, que se ve en la ficha y en el PDF.</p>`,
+      [{t:"Cancelar",c:"ghost"},{t:"Eliminar",c:"primary",f:()=>{ const x = S.actual.compromisosPrevios.splice(i,1)[0]; agregarHistorico(S.actual, x); persist(); renderActual(); }}]);
     return;
   }
   const b = e.target.closest("[data-corr]"); if (!b) return;
