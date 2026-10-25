@@ -104,7 +104,7 @@ details.sec summary{cursor:pointer;font:700 16px var(--display)}
     <div class="grid2">
       <label class="f">Nombre y apellido<input id="s-nombre" autocomplete="name"></label>
       <label class="f">Rol<input value="Mesa de Inversores" readonly></label>
-      <label class="f">Jueves de la próxima reunión<input id="s-fecha" type="date"></label>
+      <label class="f">Fecha de la próxima entrega<input id="s-fecha" type="date"></label>
     </div>
     <p class="why" id="s-err"></p>
     <div class="actions"><button class="primary" id="s-ok">Crear mi ficha</button><span class="sp"></span><label class="ghost" style="cursor:pointer;padding:9px 14px;border:1px solid var(--line);border-radius:8px;font-weight:600">Restaurar desde respaldo<input type="file" accept=".json,application/json" id="s-import" hidden></label></div>
@@ -134,7 +134,7 @@ details.sec summary{cursor:pointer;font:700 16px var(--display)}
     <h3>Cómo usar la ficha</h3>
     <ol class="hint" style="margin:0;padding-left:20px;display:grid;gap:4px">
       <li>Completá la semana actual. Se guarda sola mientras escribís.</li>
-      <li>El jueves, tocá <b>Descargar PDF</b> y mandale el archivo a Gerencia Comercial.</li>
+      <li>Cada jueves (y el último día hábil del mes), tocá <b>Descargar PDF</b> y mandale el archivo a Gerencia Comercial.</li>
       <li>Si cambiás algo después de descargar, tenés que descargar el PDF de nuevo.</li>
       <li>Tocá <b>Cerrar semana</b>: la semana pasa a «Semana anterior» y se prepara la siguiente.</li>
       <li>Descargá un respaldo al menos una vez por semana.</li>
@@ -171,14 +171,14 @@ const ROLES = {
     principal: "carpetas_completadas",
     ind: [
       {id:"solicitudes", n:"Solicitudes de financiamiento", d:"Publicadas en el mes", t:"mes", obj:true},
-      {id:"clientes_solicitudes", n:"Clientes con solicitudes", d:"Clientes distintos en el mes", t:"mes"},
-      {id:"oportunidades", n:"Oportunidades comerciales", d:"Generadas en el mes", t:"mes"},
+      {id:"clientes_solicitudes", n:"Clientes con solicitudes", d:"Clientes distintos en el mes", t:"mes", prom:"solicitudesPorCliente"},
+      {id:"oportunidades", n:"Oportunidades nuevas", d:"Ingresadas en el mes", t:"mes", trend:true},
       {id:"carpetas_completadas", n:"Carpetas completadas", d:"Pasaron a «completa» en el mes. Una vez por carpeta; una renovación no vuelve a contar.", t:"mes", obj:true},
-      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes", t:"mes"},
       {id:"volumen", n:"Volumen transaccional (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M"},
-      {id:"carpetas_completas", n:"Carpetas completas", d:"Estado actual", t:"stock"},
-      {id:"carpetas_incompletas", n:"Carpetas incompletas", d:"Estado actual", t:"stock"},
-      {id:"carpetas_revision", n:"Carpetas pendientes de revisión", d:"Estado actual", t:"stock"}
+      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes · el promedio es volumen / operaciones", t:"mes", prom:"ticket"},
+      {id:"carpetas_completas", n:"Carpetas completas", d:"Totales", t:"stock"},
+      {id:"carpetas_incompletas", n:"Carpetas incompletas", d:"Totales", t:"stock"},
+      {id:"carpetas_revision", n:"Carpetas pendientes de revisión", d:"Totales", t:"stock"}
     ],
     rev: {
       autonomia:"¿Qué resolviste solo este mes y qué todavía necesitás consultar?",
@@ -197,8 +197,8 @@ const ROLES = {
       {id:"partners_con_solicitudes", n:"Partners con clientes que publicaron solicitudes", d:"En el mes", t:"mes"},
       {id:"solicitudes_canal", n:"Solicitudes publicadas por clientes de Partners", d:"En el mes · atribución al canal, no a la carga", t:"mes", obj:true},
       {id:"carpetas_canal", n:"Carpetas completadas de clientes de Partners", d:"En el mes", t:"mes", obj:true},
-      {id:"operaciones_canal", n:"Operaciones instrumentadas del canal", d:"En el mes", t:"mes", shared:true},
       {id:"volumen_canal", n:"Volumen transaccional del canal (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M", shared:true},
+      {id:"operaciones_canal", n:"Operaciones instrumentadas del canal", d:"En el mes · el promedio es volumen / operaciones", t:"mes", shared:true, prom:"ticketCanal"},
       {id:"partners_totales", n:"Partners totales", d:"Estado actual", t:"stock"},
       {id:"partners_activos", n:"Partners activos", d:"Estado actual", t:"stock", pend:true},
       {id:"partners_operativos", n:"Partners operativos", d:"Estado actual", t:"stock", pend:true}
@@ -234,6 +234,39 @@ const ROLES = {
     }
   }
 };
+/* Indicadores con promedio en la columna Objetivo y semáforo en Cumpl. */
+const PROMEDIOS = {
+  solicitudesPorCliente: {num:"solicitudes", money:false, dec:1, regla: v => v <= 2.5 ? "ok" : v <= 3.5 ? "warn" : "bad",
+    ayuda:"Solicitudes / clientes. Hasta 2,5 bien · 2,5 a 3,5 regular · más de 3,5 mal"},
+  ticket: {num:"volumen", money:"M", dec:1, regla: v => v > 100 ? "ok" : v >= 50 ? "warn" : "bad",
+    ayuda:"Volumen / operaciones. Más de $100 M bien · $50 a $100 M regular · menos de $50 M mal"},
+  ticketCanal: {num:"volumen_canal", money:"M", dec:1, regla: v => v > 100 ? "ok" : v >= 50 ? "warn" : "bad",
+    ayuda:"Volumen / operaciones. Más de $100 M bien · $50 a $100 M regular · menos de $50 M mal"}
+};
+const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
+/* Calcula lo que va en las columnas Objetivo y Cumpl. para un indicador */
+function evalInd(k, sem, ob, ant){
+  const v = sem.ind[k.id];
+  if (k.prom){
+    const P = PROMEDIOS[k.prom], num = sem.ind[P.num];
+    const pr = (num != null && v > 0) ? Math.round(num / v * 10**P.dec) / 10**P.dec : null;
+    if (pr == null) return {obj:"Prom. –", objHtml:`<span title="${P.ayuda}">Prom. –</span>`, cum:"–", cumHtml:"–"};
+    const c = P.regla(pr), sm = SEMAFORO[c];
+    return {obj:"Prom. "+fmtNum(pr,P.money), objHtml:`<span title="${P.ayuda}">Prom. ${fmtNum(pr,P.money)}</span>`, cum:sm.t, cumHtml:`<span class="pill ${c}" title="${P.ayuda}">${sm.i} ${sm.t}</span>`};
+  }
+  if (k.trend){
+    const ok = ant && ant.ind[k.id] != null && v != null && mesDe(ant.fecha) === mesDe(sem.fecha);
+    if (!ok) return {obj:"—", objHtml:'<span class="why">—</span>', cum:"–", cumHtml:"–"};
+    const d = v - ant.ind[k.id];
+    if (d > 0) return {obj:"—", objHtml:'<span class="why">—</span>', cum:`Sube +${fmtNum(d)}`, cumHtml:`<span class="pill ok">↑ ${fmtNum(d)}</span>`};
+    if (d < 0) return {obj:"—", objHtml:'<span class="why">—</span>', cum:`Baja ${fmtNum(d)}`, cumHtml:`<span class="pill bad">↓ ${fmtNum(-d)}</span>`};
+    return {obj:"—", objHtml:'<span class="why">—</span>', cum:"Igual", cumHtml:`<span class="pill neutral">= 0</span>`};
+  }
+  if (!k.obj) return {obj:"—", objHtml:'<span class="why">—</span>', cum:"–", cumHtml:"–"};
+  const o = ob[k.id], p = pct(v, o);
+  return {obj: o!=null ? fmtNum(o,k.money) : "sin cargar", objHtml: o!=null ? fmtNum(o,k.money) : '<span class="why">sin cargar</span>',
+          cum: p!=null ? p+"%" : "–", cumHtml: p!=null ? `<span class="pill ${pclass(p)}">${p}%</span>` : "–"};
+}
 const REV_LABELS = {autonomia:"Autonomía", organizacion:"Organización", tecnico:"Conocimiento técnico", negociacion:"Negociación", seguimiento:"Seguimiento"};
 const ETAPAS = ["Prospecto","Solicitud publicada","Carpeta en armado","Carpeta completa","En análisis de inversor","Oferta","En instrumentación","Otra"];
 const AREAS = ["Gerencia","Mesa de Inversores","Operaciones","Desarrollo","Otra"];
@@ -253,7 +286,24 @@ const mesDe = s => s.slice(0,7);
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const fmtMes = m => { const [y,mm] = m.split("-"); return `${MESES[Number(mm)-1]} ${y}`; };
 const isThursday = s => parseISO(s).getDay() === 4;
-const nextThursday = () => { const d = new Date(); d.setHours(12); const diff = (4 - d.getDay() + 7) % 7; d.setDate(d.getDate()+diff); return isoLocal(d); };
+/* Fechas de corte: los jueves, más el último día hábil del mes cuando el jueves siguiente ya cae en el mes próximo.
+   (Día hábil = lunes a viernes; no contempla feriados: si el último día hábil es feriado, se elige la fecha a mano.) */
+function ultimoHabil(mes){ const [y,m] = mes.split("-").map(Number); const d = new Date(y, m, 0, 12); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate()-1); return isoLocal(d); }
+function ultimoJueves(mes){ const [y,m] = mes.split("-").map(Number); const d = new Date(y, m, 0, 12); while (d.getDay() !== 4) d.setDate(d.getDate()-1); return isoLocal(d); }
+function juevesSiguiente(f){ const d = parseISO(f); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); return isoLocal(d); }
+function proximoCorte(f){                      // próxima entrega después de la fecha f
+  const j = juevesSiguiente(f), uh = ultimoHabil(mesDe(f));
+  return (mesDe(j) !== mesDe(f) && uh > f) ? uh : j;
+}
+function primerCorteDesde(hoy){                // para el primer ingreso: hoy si es fecha de corte, si no la próxima
+  return esFechaCorte(hoy) ? hoy : proximoCorte(hoy);
+}
+function esFechaCorte(f){                      // jueves, o día hábil posterior al último jueves del mes (cierre de mes)
+  const d = parseISO(f).getDay();
+  if (d === 4) return true;
+  return d >= 1 && d <= 5 && f > ultimoJueves(mesDe(f));
+}
+const esCierreDeMes = f => !isThursday(f);
 const norm = s => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").trim().toLowerCase();
 const fmtNum = (v, money) => v == null ? "sin dato" : (money ? "$ " : "") + Number(v).toLocaleString("es-AR", {maximumFractionDigits: 2}) + (money === "M" ? " M" : "");
 const pct = (real, obj) => (obj > 0 && real != null) ? Math.round(real / obj * 100) : null;
@@ -331,7 +381,7 @@ function renderMeta(){
   $("meta").innerHTML = `
     <div><b>Ejecutivo</b>${esc(S.perfil.nombre)}</div>
     <div><b>Rol</b>${esc(r.nombre)}</div>
-    <div><b>Jueves de corte</b>${fmtFecha(sem.fecha)}</div>
+    <div><b>Fecha de corte</b>${fmtFecha(sem.fecha)}${esCierreDeMes(sem.fecha) ? " · cierre de mes" : ""}</div>
     <div><b>Mes de gestión</b>${fmtMes(mesDe(sem.fecha))}</div>
     <div><b>Objetivos del mes</b>${esc(objTxt)}</div>`;
 }
@@ -371,16 +421,16 @@ function renderActual(){
   const r = ROLES[S.perfil.rol], a = S.actual, ant = S.anterior, ob = objetivos(a);
   const mismoMes = ant && mesDe(ant.fecha) === mesDe(a.fecha);
   const fila = k => {
-    const v = a.ind[k.id], o = k.obj ? ob[k.id] : null, p = k.obj ? pct(v, o) : null;
+    const v = a.ind[k.id], E = evalInd(k, a, ob, ant);
     let delta = "–";
     if (ant && ant.ind[k.id] != null && v != null && (k.t === "stock" || mismoMes)){
       const d = v - ant.ind[k.id]; delta = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
     }
     return `<tr>
       <td class="name">${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}${k.shared?'<span class="shared">Resultado compartido</span>':''}<small>${esc(k.d)}</small></td>
-      ${k.t==="mes" ? `<td class="n">${k.obj ? (o!=null ? fmtNum(o,k.money) : '<span class="why">sin cargar</span>') : '<span class="why">—</span>'}</td>` : ""}
+      ${k.t==="mes" ? `<td class="n" data-obj="${k.id}">${E.objHtml}</td>` : ""}
       <td class="n"><input type="number" min="0" step="any" inputmode="decimal" data-ind="${k.id}" value="${v ?? ""}" placeholder="sin dato" aria-label="${esc(k.n)}"></td>
-      ${k.t==="mes" ? `<td class="n" data-pct="${k.id}">${p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"}</td>` : ""}
+      ${k.t==="mes" ? `<td class="n" data-pct="${k.id}">${E.cumHtml}</td>` : ""}
       <td class="n delta" data-delta="${k.id}">${delta}</td></tr>`;
   };
   const mes = r.ind.filter(k => k.t === "mes"), stock = r.ind.filter(k => k.t === "stock");
@@ -411,7 +461,7 @@ function renderActual(){
   $("v-actual").innerHTML = `
   <section class="panel">
     <div class="actions">
-      <label class="f" style="max-width:220px">Jueves de corte<input type="date" id="f-fecha" value="${a.fecha}"></label>
+      <label class="f" style="max-width:220px">Fecha de corte<input type="date" id="f-fecha" value="${a.fecha}"></label>
       <div class="statusbar" id="status" style="flex:1"></div>
     </div>
     ${r.nota ? `<p class="hint">${esc(r.nota)}</p>` : ""}
@@ -420,7 +470,7 @@ function renderActual(){
   <section class="panel">
     <h2><span class="tag">A</span>Indicadores</h2>
     <h3>Producción del mes · acumulado del 1/${mesDe(a.fecha).slice(5)} al ${fmtFecha(a.fecha)}</h3>
-    <p class="hint">Cargá el acumulado del mes al jueves de corte (no lo de la semana sola). Al cambiar de semana se traslada como punto de partida; al cambiar de mes vuelve a 0.</p>
+    <p class="hint">Cargá el acumulado del mes a la fecha de corte (no lo de la semana sola). Al cambiar de semana se traslada como punto de partida; al cambiar de mes vuelve a 0.</p>
     <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Acumulado</th><th class="n">Cumpl.</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${mes.map(fila).join("")}</tbody></table></div>
     <h3>Estado actual · foto al ${fmtFecha(a.fecha)}</h3>
     <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Cantidad hoy</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${stock.map(fila).join("")}</tbody></table></div>
@@ -494,7 +544,7 @@ function onEdit(e){
   if (t.dataset.ind){
     const v = num(t.value);
     if (v != null && (isNaN(v) || v < 0)){ t.classList.add("err"); return; }
-    t.classList.remove("err"); a.ind[t.dataset.ind] = v; refreshIndicador(t.dataset.ind);
+    t.classList.remove("err"); a.ind[t.dataset.ind] = v; ROLES[S.perfil.rol].ind.forEach(x => refreshIndicador(x.id));
   }
   else if (t.dataset.o){ const [i,f] = t.dataset.o.split("."); if (f==="monto"){ const v=num(t.value); if (v!=null&&(isNaN(v)||v<0)){t.classList.add("err");return;} t.classList.remove("err"); a.oportunidades[i][f]=v; } else a.oportunidades[i][f]=t.value; }
   else if (t.dataset.b) a.balance[t.dataset.b] = t.value;
@@ -508,8 +558,9 @@ function onEdit(e){
 }
 function refreshIndicador(id){
   const k = ROLES[S.perfil.rol].ind.find(x => x.id === id), a = S.actual, ant = S.anterior, v = a.ind[id];
-  const pc = document.querySelector(`[data-pct="${id}"]`);
-  if (pc){ const p = k.obj ? pct(v, objetivos(a)[id]) : null; pc.innerHTML = p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"; }
+  const E = evalInd(k, a, objetivos(a), ant);
+  const pc = document.querySelector(`[data-pct="${id}"]`); if (pc) pc.innerHTML = E.cumHtml;
+  const oc = document.querySelector(`[data-obj="${id}"]`); if (oc) oc.innerHTML = E.objHtml;
   const dc = document.querySelector(`[data-delta="${id}"]`);
   if (dc){ const ok = ant && ant.ind[id]!=null && v!=null && (k.t==="stock" || mesDe(ant.fecha)===mesDe(a.fecha)); const d = ok ? v-ant.ind[id] : null; dc.textContent = d==null ? "–" : (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); }
 }
@@ -517,10 +568,10 @@ function cambiarFecha(e){
   const v = e.target.value, a = S.actual;
   const err = msg => { toast(msg); e.target.value = a.fecha; };
   if (!v) return err("Elegí una fecha.");
-  if (!isThursday(v)) return err("La fecha de corte tiene que ser un jueves.");
+  if (!esFechaCorte(v)) return err("La fecha de corte tiene que ser un jueves o un día hábil de cierre de mes (después del último jueves).");
   if (S.cerradas.includes(v)) return err("Esa semana ya fue cerrada.");
   if (S.anterior && v <= S.anterior.fecha) return err("La fecha tiene que ser posterior a la semana anterior.");
-  const esperado = S.anterior ? addDays(S.anterior.fecha, 7) : null;
+  const esperado = S.anterior ? proximoCorte(S.anterior.fecha) : null;
   const cambiaMes = mesDe(v) !== mesDe(a.fecha);
   const aplicar = () => {
     a.fecha = v;
@@ -530,7 +581,7 @@ function cambiarFecha(e){
     persist(); renderMeta(); renderActual();
   };
   if (esperado && v !== esperado){
-    modal(`<h2>¿Saltear semanas?</h2><p>Después del ${fmtFecha(S.anterior.fecha)} correspondería el jueves ${fmtFecha(esperado)}. Elegiste el ${fmtFecha(v)}.${cambiaMes?" Como cambia el mes, la producción mensual se reinicia.":""}</p>`,
+    modal(`<h2>¿Saltear semanas?</h2><p>Después del ${fmtFecha(S.anterior.fecha)} correspondería el ${fmtFecha(esperado)}. Elegiste el ${fmtFecha(v)}.${cambiaMes?" Como cambia el mes, la producción mensual se reinicia.":""}</p>`,
       [{t:"Cancelar", c:"ghost", f:()=>{ e.target.value = a.fecha; }}, {t:"Usar "+fmtFecha(v), c:"primary", f:aplicar}]);
   } else aplicar();
 }
@@ -540,11 +591,11 @@ function renderAnterior(){
   const el = $("v-anterior");
   if (!S.anterior){ el.innerHTML = `<h2>Semana anterior</h2><p class="hint">Todavía no cerraste ninguna semana. Cuando cierres la actual, va a aparecer acá en modo consulta.</p>`; return; }
   const s = S.anterior, r = ROLES[S.perfil.rol], ob = s.objetivosUsados || {};
-  const ind = r.ind.map(k => { const p = k.obj ? pct(s.ind[k.id], ob[k.id]) : null;
-    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${k.t==="mes"?"Acumulado del mes":"Estado actual"}</small></td><td class="n">${k.obj?(ob[k.id]!=null?fmtNum(ob[k.id],k.money):"sin cargar"):"—"}</td><td class="n">${fmtNum(s.ind[k.id],k.money)}</td><td class="n">${p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"}</td></tr>`; }).join("");
+  const ind = r.ind.map(k => { const E = evalInd(k, s, ob, null);
+    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${k.t==="mes"?"Acumulado del mes":"Estado actual"}</small></td><td class="n">${k.t==="mes"?E.objHtml:"—"}</td><td class="n">${fmtNum(s.ind[k.id],k.money)}</td><td class="n">${k.t==="mes"?E.cumHtml:"–"}</td></tr>`; }).join("");
   const opp = s.oportunidades.filter(o=>o.nombre.trim()).map(o=>`<tr><td>${esc(o.nombre)}</td><td class="n">${o.monto!=null?fmtNum(o.monto,true):"–"}</td><td>${esc(o.etapa)}</td><td>${esc(o.bloqueo)}</td><td>${esc(o.accion)}</td><td>${esc(o.responsable)}</td><td>${fmtFecha(o.fecha)}</td></tr>`).join("") || `<tr><td colspan="7" class="why">Sin oportunidades cargadas.</td></tr>`;
   const B = s.balance;
-  el.innerHTML = `<h2>Semana anterior · jueves ${fmtFecha(s.fecha)} <span class="pill neutral">Solo lectura · cerrada el ${new Date(s.cerradaEn).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}</span></h2>
+  el.innerHTML = `<h2>Semana anterior · corte ${fmtFecha(s.fecha)} <span class="pill neutral">Solo lectura · cerrada el ${new Date(s.cerradaEn).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}</span></h2>
     <h3>Indicadores</h3><div class="scroll"><table><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Valor</th><th class="n">Cumpl.</th></tr></thead><tbody>${ind}</tbody></table></div>
     ${r.extra && s.extra ? `<dl><dt>${esc(r.extra.n)}</dt><dd>${esc(s.extra)}</dd></dl>`:""}
     <h3>Oportunidades prioritarias</h3><div class="scroll"><table><thead><tr><th>Empresa / ID</th><th class="n">Monto</th><th>Etapa</th><th>Bloqueo</th><th>Próxima acción</th><th>Resp.</th><th>Fecha</th></tr></thead><tbody>${opp}</tbody></table></div>
@@ -570,14 +621,14 @@ function construirPDF(sem, version){
   const pie = () => {
     const n = doc.getNumberOfPages();
     for (let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(110);
-      doc.text(`MeChe · Ficha de gestión · ${S.perfil.nombre} · Jueves ${fmtFecha(sem.fecha)} · Versión ${version} · Exportado ${exportado.toLocaleString("es-AR")}`, M, 290);
+      doc.text(`MeChe · Ficha de gestión · ${S.perfil.nombre} · Corte ${fmtFecha(sem.fecha)} · Versión ${version} · Exportado ${exportado.toLocaleString("es-AR")}`, M, 290);
       doc.text(`Página ${i} de ${n}`, W-M, 290, {align:"right"}); }
   };
   doc.setFillColor(...verde); doc.rect(0,0,W,30,"F");
   doc.setTextColor(255); doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Mercado Cheque · Ficha de gestión semanal", M, 13);
   doc.setFont("helvetica","normal"); doc.setFontSize(10);
   doc.text(`${S.perfil.nombre} · ${r.nombre}`, M, 20);
-  doc.text(`Jueves de corte: ${fmtFecha(sem.fecha)} · Mes de gestión: ${fmtMes(mesDe(sem.fecha))} · Período: 01/${mesDe(sem.fecha).slice(5)}/${mesDe(sem.fecha).slice(0,4)} al ${fmtFecha(sem.fecha)}`, M, 26);
+  doc.text(`Fecha de corte: ${fmtFecha(sem.fecha)}${esCierreDeMes(sem.fecha) ? " (cierre de mes)" : ""} · Mes de gestión: ${fmtMes(mesDe(sem.fecha))} · Período: 01/${mesDe(sem.fecha).slice(5)}/${mesDe(sem.fecha).slice(0,4)} al ${fmtFecha(sem.fecha)}`, M, 26);
   doc.setTextColor(20);
   let y = 38;
   const titulo = t => { if (y > 245){ doc.addPage(); y = 18; } doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...verde); doc.text(t, M, y); doc.setTextColor(20); y += 3; };
@@ -585,9 +636,10 @@ function construirPDF(sem, version){
   const dlt = k => { if (!(ant && ant.ind[k.id]!=null && sem.ind[k.id]!=null && (k.t==="stock"||mismoMes))) return "–"; const d = sem.ind[k.id]-ant.ind[k.id]; return (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); };
   const nota = k => (k.pend?" [definición pendiente]":"")+(k.shared?" [resultado compartido]":"");
 
-  titulo("A. Producción del mes (acumulado al jueves de corte)");
-  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const o=k.obj?ob[k.id]:null, p=k.obj?pct(sem.ind[k.id],o):null; return [k.n+nota(k), k.obj?(o!=null?fmtNum(o,k.money):"sin cargar"):"—", fmtNum(sem.ind[k.id],k.money), p!=null?p+"%":"–", dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}}});
-  titulo("A. Estado actual (stock al jueves de corte)");
+  titulo("A. Producción del mes (acumulado a la fecha de corte)");
+  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, fmtNum(sem.ind[k.id],k.money), E.cum, dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}},
+    didParseCell: d => { if (d.section==="body" && d.column.index===3){ const t=String(d.cell.raw); const c = t==="Bien"||t.startsWith("Sube")?[15,122,61]:t==="Regular"?[143,91,0]:t==="Mal"||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } }});
+  titulo("A. Estado actual (stock a la fecha de corte)");
   tabla(["Indicador","Cantidad","vs. sem. ant."], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money), dlt(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
   if (r.extra && sem.extra.trim()){ titulo(r.extra.n); tabla(["Detalle"], [[sem.extra]]); }
   const opps = sem.oportunidades.filter(o=>o.nombre.trim());
@@ -631,12 +683,12 @@ function descargarPDF(){
 /* ================= CIERRE ================= */
 function pedirCierre(){
   if (!pdfVigente()) return;
-  if (S.cerradas.includes(S.actual.fecha)) return modal(`<h2>Semana ya cerrada</h2><p>El jueves ${fmtFecha(S.actual.fecha)} ya fue cerrado antes.</p>`, [{t:"Entendido",c:"primary"}]);
+  if (S.cerradas.includes(S.actual.fecha)) return modal(`<h2>Semana ya cerrada</h2><p>El corte del ${fmtFecha(S.actual.fecha)} ya fue cerrado antes.</p>`, [{t:"Entendido",c:"primary"}]);
   const f = faltantes();
-  const prox = addDays(S.actual.fecha, 7), cambiaMes = mesDe(prox) !== mesDe(S.actual.fecha);
+  const prox = proximoCorte(S.actual.fecha), cambiaMes = mesDe(prox) !== mesDe(S.actual.fecha);
   modal(`<h2>Cerrar semana del ${fmtFecha(S.actual.fecha)}</h2>
     ${f.length ? `<p class="banner warn">Quedan datos sin completar: ${esc(f.join(" · "))}. Podés cerrar igual; van a figurar así en el PDF.</p>` : ""}
-    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara el jueves ${fmtFecha(prox)}${cambiaMes ? `, que empieza un mes nuevo: la producción mensual vuelve a 0 y el stock se mantiene` : ", con los acumulados del mes como punto de partida"}.</p>
+    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara la entrega del ${fmtFecha(prox)}${esCierreDeMes(prox) ? " (último día hábil del mes: cierre de mes)" : ""}${cambiaMes ? `, que empieza un mes nuevo: la producción mensual vuelve a 0 y el stock se mantiene` : ", con los acumulados del mes como punto de partida"}.</p>
     <p class="hint">La ficha no puede comprobar que el archivo se haya guardado ni que lo hayas enviado.</p>
     <label class="check"><input type="checkbox" id="m-ok"> Ya envié el PDF a Gerencia Comercial.</label>`,
     [{t:"Cancelar", c:"ghost"}, {t:"Cerrar semana", c:"primary", id:"m-confirm", disabled:true, f:cerrar}],
@@ -650,7 +702,7 @@ function cerrar(){
     cerrada.cerradaEn = new Date().toISOString();
     cerrada.objetivosUsados = objetivos(S.actual);
     cerrada.pdfVersion = S.pdf.version;
-    const prox = addDays(cerrada.fecha, 7);
+    const prox = proximoCorte(cerrada.fecha);
     const nueva = nuevaSemana(prox, S.perfil.rol, cerrada);
     S.cerradas = [...S.cerradas, cerrada.fecha].slice(-60);
     S.anterior = cerrada;
@@ -662,7 +714,7 @@ function cerrar(){
     modal(`<h2>No se pudo cerrar la semana</h2><p>Hubo un error al guardar en este navegador. La semana sigue abierta y no se perdió nada. Descargá un respaldo y avisale a Gerencia.</p>`, [{t:"Entendido",c:"primary"}]);
     return;
   }
-  renderAll(); toast("Semana cerrada. Ya podés cargar el jueves " + fmtFecha(S.actual.fecha));
+  renderAll(); toast("Semana cerrada. Próxima entrega: " + fmtFecha(S.actual.fecha) + (esCierreDeMes(S.actual.fecha) ? " (cierre de mes)" : ""));
 }
 
 /* ================= RESPALDO ================= */
@@ -712,13 +764,13 @@ function renderAll(){
 
 /* ================= INICIO ================= */
 function setup(){
-  $("s-fecha").value = nextThursday();
+  $("s-fecha").value = primerCorteDesde(isoLocal(new Date()));
   $("s-ok").onclick = () => {
     const nombre = $("s-nombre").value.trim(), rol = ROL, fecha = $("s-fecha").value;
     const err = t => $("s-err").textContent = t;
     if (nombre.length < 3) return err("Escribí tu nombre y apellido.");
     if (!rol) return err("Elegí tu rol.");
-    if (!fecha || !isThursday(fecha)) return err("La fecha tiene que ser un jueves.");
+    if (!fecha || !esFechaCorte(fecha)) return err("La fecha tiene que ser un jueves o el último día hábil del mes.");
     S = {app:"meche-ficha", appVersion:APP_VERSION, perfil:{nombre, rol}, actual:nuevaSemana(fecha, rol, null), anterior:null, cerradas:[], pdf:null, respaldo:null, creado:new Date().toISOString()};
     if (persist()) renderAll();
   };
