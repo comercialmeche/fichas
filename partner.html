@@ -166,7 +166,7 @@ const OBJETIVOS = {
 };
 // Volumen: siempre en MILLONES de pesos (1600 = $ 1.600 M).
 // Además del objetivo por rol, se puede cargar uno por persona: "2026-11": { cliente: {...}, "Nombre Apellido": { carpetas_completadas: 45 } }
-const APP_VERSION = "1.14 · 25/10/2026";
+const APP_VERSION = "1.15 · 25/10/2026";
 
 /* ================= DEFINICIÓN DE ROLES ================= */
 // t: "mes" = producción acumulada del mes (día 1 al jueves de corte) · "stock" = foto del estado actual
@@ -718,14 +718,17 @@ function construirPDF(sem, version){
   const dlt = k => { const C = compAnt(k, sem, ant); return C ? C.txt : "–"; };
   const nota = k => (k.pend?" [definición pendiente]":"")+(k.shared?" [resultado compartido]":"");
 
+  const cuerpo = (sem, ant, ob, conAnt) => {
   const antLbl = ant ? `Corte ant. ${fmtFecha(ant.fecha)}` : "Corte ant.", actLbl = `Corte ${fmtFecha(sem.fecha)}`;
   const antVal = k => (!ant || ant.ind[k.id] == null || (k.t === "mes" && mesDe(ant.fecha) !== mesDe(sem.fecha))) ? "–" : fmtNum(ant.ind[k.id], k.money);
   const difVal = k => { if (antVal(k) === "–" || sem.ind[k.id] == null) return "–"; const d = sem.ind[k.id] - ant.ind[k.id]; return (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ ")+(k.t==="mes" && d<0 && sem.correcciones && sem.correcciones[k.id] ? " (corrige el corte ant.)" : ""); };
   titulo("A. Producción del mes (acumulado a la fecha de corte)");
-  tabla(["Indicador","Objetivo",antLbl,actLbl,"Cumpl.","Diferencia"], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, antVal(k), fmtNum(sem.ind[k.id],k.money), E.cum, difVal(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right",fontStyle:"bold"},4:{halign:"right"},5:{halign:"right"}},
-    didParseCell: d => { if (d.section==="body" && d.column.index===4){ const t=String(d.cell.raw); const c = ["Bien","Mantener"].includes(t)||t.startsWith("Sube")?[15,122,61]:["Regular","Mejorar montos"].includes(t)?[143,91,0]:["Mal","Montos bajos"].includes(t)||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } }});
+  const colorCum = ci => d => { if (d.section==="body" && d.column.index===ci){ const t=String(d.cell.raw); const c = ["Bien","Mantener"].includes(t)||t.startsWith("Sube")?[15,122,61]:["Regular","Mejorar montos"].includes(t)?[143,91,0]:["Mal","Montos bajos"].includes(t)||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } };
+  if (conAnt) tabla(["Indicador","Objetivo",antLbl,actLbl,"Cumpl.","Diferencia"], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, antVal(k), fmtNum(sem.ind[k.id],k.money), E.cum, difVal(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right",fontStyle:"bold"},4:{halign:"right"},5:{halign:"right"}}, didParseCell: colorCum(4)});
+  else tabla(["Indicador","Objetivo","Valor","Cumpl."], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, null); return [k.n+nota(k), E.obj, fmtNum(sem.ind[k.id],k.money), E.cum]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right",fontStyle:"bold"},3:{halign:"right"}}, didParseCell: colorCum(3)});
   titulo("A. Estado actual (stock a la fecha de corte)");
-  tabla(["Indicador",antLbl,actLbl,"Diferencia"], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), antVal(k), fmtNum(sem.ind[k.id],k.money), difVal(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right",fontStyle:"bold"},3:{halign:"right"}}});
+  if (conAnt) tabla(["Indicador",antLbl,actLbl,"Diferencia"], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), antVal(k), fmtNum(sem.ind[k.id],k.money), difVal(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right",fontStyle:"bold"},3:{halign:"right"}}});
+  else tabla(["Indicador","Cantidad"], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money)]), {columnStyles:{1:{halign:"right",fontStyle:"bold"}}});
   if (r.extra && sem.extra.trim()){ titulo(r.extra.n); tabla(["Detalle"], [[sem.extra]]); }
   const opps = sem.oportunidades.filter(o=>o.nombre.trim());
   titulo("B. Oportunidades prioritarias");
@@ -750,6 +753,18 @@ function construirPDF(sem, version){
   tabla(["Área","Detalle"], ap.length ? ap.map(x=>[x.area||"–", x.detalle]) : [["–","Sin pedidos de apoyo"]], {columnStyles:{0:{cellWidth:45}}});
   const rv = Object.entries(sem.revision).filter(([,v])=>v.trim());
   if (rv.length){ titulo("Revisión mensual de desarrollo (autoevaluación)"); tabla(["Competencia","Autoevaluación"], rv.map(([k,v])=>[REV_LABELS[k], v]), {columnStyles:{0:{cellWidth:45,fontStyle:"bold"}}}); }
+  };
+  cuerpo(sem, S.anterior, objetivos(sem), true);
+  if (S.anterior){   // segundo reporte: la semana anterior completa
+    const s2 = S.anterior;
+    doc.addPage();
+    doc.setFillColor(...verde); doc.rect(0,0,W,24,"F");
+    doc.setTextColor(255); doc.setFont("helvetica","bold"); doc.setFontSize(14); doc.text(`Semana anterior · corte ${fmtFecha(s2.fecha)}${esCierreDeMes(s2.fecha) ? " (cierre de mes)" : ""}`, M, 11);
+    doc.setFont("helvetica","normal"); doc.setFontSize(10);
+    doc.text(`${S.perfil.nombre} · Mes de gestión: ${fmtMes(mesDe(s2.fecha))} · Cerrada el ${new Date(s2.cerradaEn).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})} · PDF versión ${s2.pdfVersion || "–"}`, M, 18);
+    doc.setTextColor(20); y = 32;
+    cuerpo(s2, null, s2.objetivosUsados || {}, false);
+  }
   if (y > 270){ doc.addPage(); y = 18; }
   doc.setFontSize(8.5); doc.setTextColor(90);
   doc.text("Documento preparado por el ejecutivo. No incluye evaluación ni aprobación de Gerencia Comercial.", M, y);
