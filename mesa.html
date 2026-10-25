@@ -175,7 +175,7 @@ const ROLES = {
       {id:"oportunidades", n:"Oportunidades nuevas", d:"Ingresadas en el mes", t:"mes", trend:true},
       {id:"carpetas_completadas", n:"Carpetas completadas", d:"Pasaron a «completa» en el mes. Una vez por carpeta; una renovación no vuelve a contar.", t:"mes", obj:true},
       {id:"volumen", n:"Volumen transaccional (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M"},
-      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes · el promedio es volumen / operaciones", t:"mes", prom:"ticket"},
+      {id:"operaciones", n:"Cantidad de operaciones instrumentadas", d:"En el mes · el promedio es volumen / operaciones", t:"mes", prom:"ticket"},
       {id:"carpetas_completas", n:"Carpetas completas", d:"Totales", t:"stock"},
       {id:"carpetas_incompletas", n:"Carpetas incompletas", d:"Totales", t:"stock"},
       {id:"carpetas_revision", n:"Carpetas pendientes de revisión", d:"Totales", t:"stock"}
@@ -198,7 +198,7 @@ const ROLES = {
       {id:"solicitudes_canal", n:"Solicitudes publicadas por clientes de Partners", d:"En el mes · atribución al canal, no a la carga", t:"mes", obj:true},
       {id:"carpetas_canal", n:"Carpetas completadas de clientes de Partners", d:"En el mes", t:"mes", obj:true},
       {id:"volumen_canal", n:"Volumen transaccional del canal (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M", shared:true},
-      {id:"operaciones_canal", n:"Operaciones instrumentadas del canal", d:"En el mes · el promedio es volumen / operaciones", t:"mes", shared:true, prom:"ticketCanal"},
+      {id:"operaciones_canal", n:"Cantidad de operaciones instrumentadas del canal", d:"En el mes · el promedio es volumen / operaciones", t:"mes", shared:true, prom:"ticketCanal"},
       {id:"partners_totales", n:"Partners totales", d:"Estado actual", t:"stock"},
       {id:"partners_activos", n:"Partners activos", d:"Estado actual", t:"stock", pend:true},
       {id:"partners_operativos", n:"Partners operativos", d:"Estado actual", t:"stock", pend:true}
@@ -237,11 +237,14 @@ const ROLES = {
 /* Indicadores con promedio en la columna Objetivo y semáforo en Cumpl. */
 const PROMEDIOS = {
   solicitudesPorCliente: {num:"solicitudes", money:false, dec:1, regla: v => v <= 2.5 ? "ok" : v <= 3.5 ? "warn" : "bad",
-    ayuda:"Solicitudes / clientes. Hasta 2,5 bien · 2,5 a 3,5 regular · más de 3,5 mal"},
+    ayuda:"Solicitudes / clientes. Hasta 2,5 bien · 2,5 a 3,5 regular · más de 3,5 mal",
+    etiquetas:{ok:{i:"✔", t:"", pdf:"Bien"}, warn:{i:"⚠", t:"", pdf:"Regular"}, bad:{i:"✖", t:"", pdf:"Mal"}}},
   ticket: {num:"volumen", money:"M", dec:1, regla: v => v > 100 ? "ok" : v >= 50 ? "warn" : "bad",
-    ayuda:"Volumen / operaciones. Más de $100 M bien · $50 a $100 M regular · menos de $50 M mal"},
+    ayuda:"Volumen / operaciones. Más de $100 M: mantener · $50 a $100 M: mejorar montos · menos de $50 M: montos bajos",
+    etiquetas:{ok:{i:"", t:"Mantener"}, warn:{i:"", t:"Mejorar montos"}, bad:{i:"", t:"Montos bajos"}}},
   ticketCanal: {num:"volumen_canal", money:"M", dec:1, regla: v => v > 100 ? "ok" : v >= 50 ? "warn" : "bad",
-    ayuda:"Volumen / operaciones. Más de $100 M bien · $50 a $100 M regular · menos de $50 M mal"}
+    ayuda:"Volumen / operaciones. Más de $100 M: mantener · $50 a $100 M: mejorar montos · menos de $50 M: montos bajos",
+    etiquetas:{ok:{i:"", t:"Mantener"}, warn:{i:"", t:"Mejorar montos"}, bad:{i:"", t:"Montos bajos"}}}
 };
 const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
 /* Calcula lo que va en las columnas Objetivo y Cumpl. para un indicador */
@@ -251,8 +254,10 @@ function evalInd(k, sem, ob, ant){
     const P = PROMEDIOS[k.prom], num = sem.ind[P.num];
     const pr = (num != null && v > 0) ? Math.round(num / v * 10**P.dec) / 10**P.dec : null;
     if (pr == null) return {obj:"Prom. –", objHtml:`<span title="${P.ayuda}">Prom. –</span>`, cum:"–", cumHtml:"–"};
-    const c = P.regla(pr), sm = SEMAFORO[c];
-    return {obj:"Prom. "+fmtNum(pr,P.money), objHtml:`<span title="${P.ayuda}">Prom. ${fmtNum(pr,P.money)}</span>`, cum:sm.t, cumHtml:`<span class="pill ${c}" title="${P.ayuda}">${sm.i} ${sm.t}</span>`};
+    const c = P.regla(pr), sm = (P.etiquetas || SEMAFORO)[c];
+    const vis = [sm.i, sm.t].filter(Boolean).join(" ");
+    return {obj:"Prom. "+fmtNum(pr,P.money), objHtml:`<span title="${P.ayuda}">Prom. ${fmtNum(pr,P.money)}</span>`, cum: sm.pdf || sm.t, cls:c,
+            cumHtml:`<span class="pill ${c}" title="${P.ayuda}" aria-label="${sm.pdf || sm.t}">${vis}</span>`};
   }
   if (k.trend){
     const ok = ant && ant.ind[k.id] != null && v != null && mesDe(ant.fecha) === mesDe(sem.fecha);
@@ -322,7 +327,7 @@ function nuevaSemana(fecha, rol, previa){
   ROLES[rol].ind.forEach(k => {
     if (!previa) ind[k.id] = null;
     else if (k.t === "stock") ind[k.id] = previa.ind[k.id] ?? null;                 // stock: se mantiene
-    else ind[k.id] = mesDe(previa.fecha) === mesDe(fecha) ? (previa.ind[k.id] ?? null) : 0; // mes: traslado editable o reinicio
+    else ind[k.id] = null;   // producción del mes: se vuelve a cargar en cada entrega (la anterior queda como referencia en «vs. sem. ant.»)
   });
   const pendientes = previa ? [
     ...previa.compromisosPrevios.filter(c => c.estado !== "Cumplido").map(c => ({texto:c.texto, fecha:c.fecha, resultado:c.resultado, desde:c.desde, estado:"", explicacion:""})),
@@ -470,7 +475,7 @@ function renderActual(){
   <section class="panel">
     <h2><span class="tag">A</span>Indicadores</h2>
     <h3>Producción del mes · acumulado del 1/${mesDe(a.fecha).slice(5)} al ${fmtFecha(a.fecha)}</h3>
-    <p class="hint">Cargá el acumulado del mes a la fecha de corte (no lo de la semana sola). Al cambiar de semana se traslada como punto de partida; al cambiar de mes vuelve a 0.</p>
+    <p class="hint">Cargá el acumulado del mes a la fecha de corte (no lo de la semana sola). En cada entrega se vuelve a cargar; el valor anterior queda como referencia en «vs. sem. ant.». El stock se mantiene de una entrega a otra.</p>
     <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Acumulado</th><th class="n">Cumpl.</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${mes.map(fila).join("")}</tbody></table></div>
     <h3>Estado actual · foto al ${fmtFecha(a.fecha)}</h3>
     <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Cantidad hoy</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${stock.map(fila).join("")}</tbody></table></div>
@@ -575,9 +580,6 @@ function cambiarFecha(e){
   const cambiaMes = mesDe(v) !== mesDe(a.fecha);
   const aplicar = () => {
     a.fecha = v;
-    if (cambiaMes && S.anterior){ // recalcular arrastre de producción según el nuevo mes
-      ROLES[S.perfil.rol].ind.filter(k=>k.t==="mes").forEach(k => a.ind[k.id] = mesDe(S.anterior.fecha) === mesDe(v) ? (S.anterior.ind[k.id] ?? null) : 0);
-    }
     persist(); renderMeta(); renderActual();
   };
   if (esperado && v !== esperado){
@@ -638,7 +640,7 @@ function construirPDF(sem, version){
 
   titulo("A. Producción del mes (acumulado a la fecha de corte)");
   tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, fmtNum(sem.ind[k.id],k.money), E.cum, dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}},
-    didParseCell: d => { if (d.section==="body" && d.column.index===3){ const t=String(d.cell.raw); const c = t==="Bien"||t.startsWith("Sube")?[15,122,61]:t==="Regular"?[143,91,0]:t==="Mal"||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } }});
+    didParseCell: d => { if (d.section==="body" && d.column.index===3){ const t=String(d.cell.raw); const c = ["Bien","Mantener"].includes(t)||t.startsWith("Sube")?[15,122,61]:["Regular","Mejorar montos"].includes(t)?[143,91,0]:["Mal","Montos bajos"].includes(t)||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } }});
   titulo("A. Estado actual (stock a la fecha de corte)");
   tabla(["Indicador","Cantidad","vs. sem. ant."], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money), dlt(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
   if (r.extra && sem.extra.trim()){ titulo(r.extra.n); tabla(["Detalle"], [[sem.extra]]); }
@@ -688,7 +690,7 @@ function pedirCierre(){
   const prox = proximoCorte(S.actual.fecha), cambiaMes = mesDe(prox) !== mesDe(S.actual.fecha);
   modal(`<h2>Cerrar semana del ${fmtFecha(S.actual.fecha)}</h2>
     ${f.length ? `<p class="banner warn">Quedan datos sin completar: ${esc(f.join(" · "))}. Podés cerrar igual; van a figurar así en el PDF.</p>` : ""}
-    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara la entrega del ${fmtFecha(prox)}${esCierreDeMes(prox) ? " (último día hábil del mes: cierre de mes)" : ""}${cambiaMes ? `, que empieza un mes nuevo: la producción mensual vuelve a 0 y el stock se mantiene` : ", con los acumulados del mes como punto de partida"}.</p>
+    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara la entrega del ${fmtFecha(prox)}${esCierreDeMes(prox) ? " (último día hábil del mes: cierre de mes)" : ""}. La producción del mes queda vacía para volver a cargarla${cambiaMes ? " (empieza un mes nuevo)" : ""} y el stock se mantiene.</p>
     <p class="hint">La ficha no puede comprobar que el archivo se haya guardado ni que lo hayas enviado.</p>
     <label class="check"><input type="checkbox" id="m-ok"> Ya envié el PDF a Gerencia Comercial.</label>`,
     [{t:"Cancelar", c:"ghost"}, {t:"Cerrar semana", c:"primary", id:"m-confirm", disabled:true, f:cerrar}],
