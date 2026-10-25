@@ -83,6 +83,7 @@ details.sec summary{cursor:pointer;font:700 16px var(--display)}
 .check{display:flex;gap:10px;align-items:flex-start;font-weight:600}
 .check input{width:auto;margin-top:4px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:60}
+.linkbtn{background:none;border:0;padding:0;color:var(--brand);font:600 13px var(--body);text-decoration:underline;cursor:pointer}
 .pend{background:var(--warn-bg);color:var(--warn);font-size:12px;font-weight:700;border-radius:5px;padding:1px 6px;margin-left:6px}
 .shared{background:var(--info-bg);color:var(--info);font-size:12px;font-weight:700;border-radius:5px;padding:1px 6px;margin-left:6px}
 @media (max-width:640px){.ro dl{grid-template-columns:1fr}.meta{font-size:13px}}
@@ -90,7 +91,7 @@ details.sec summary{cursor:pointer;font:700 16px var(--display)}
 </head>
 <body>
 <header class="hd"><div class="in">
-  <div class="brand">Mercado Cheque<small>Ficha de gestión semanal · Atención al Cliente</small></div>
+  <div class="brand">Mercado Cheque<small>Ficha de gestión semanal · Atención al Cliente</small><small id="ver" style="opacity:.7;letter-spacing:0;text-transform:none;font-weight:400"></small></div>
   <div class="meta" id="meta"></div>
 </div></header>
 
@@ -161,7 +162,7 @@ const OBJETIVOS = {
 };
 // Volumen: siempre en MILLONES de pesos (1600 = $ 1.600 M).
 // Además del objetivo por rol, se puede cargar uno por persona: "2026-11": { cliente: {...}, "Nombre Apellido": { carpetas_completadas: 45 } }
-const APP_VERSION = "1.0";
+const APP_VERSION = "1.11 · 25/10/2026";
 
 /* ================= DEFINICIÓN DE ROLES ================= */
 // t: "mes" = producción acumulada del mes (día 1 al jueves de corte) · "stock" = foto del estado actual
@@ -248,12 +249,22 @@ const PROMEDIOS = {
 };
 const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
 /* Columna «vs. corte ant.»: diferencia + valor de la entrega anterior (o solo el valor anterior si todavía no se cargó el nuevo) */
+function bajas(sem, ant){
+  if (!ant) return [];
+  return ROLES[S.perfil.rol].ind.filter(k => { const C = compAnt(k, sem, ant); return C && C.baja; });
+}
 function compAnt(k, sem, ant){
   if (!ant || ant.ind[k.id] == null) return null;
-  if (k.t === "mes" && mesDe(ant.fecha) !== mesDe(sem.fecha)) return null;
   const av = ant.ind[k.id], v = sem.ind[k.id], antTxt = "ant. " + fmtNum(av, k.money);
   if (v == null) return {html:`<span class="why">${antTxt}</span>`, txt:antTxt};
-  const d = v - av, dTxt = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
+  if (k.t === "mes" && mesDe(ant.fecha) !== mesDe(sem.fecha)) return {html:`<span class="why">${antTxt} · mes anterior</span>`, txt:`${antTxt} (mes anterior)`};
+  const d = v - av;
+  if (k.t === "mes" && d < 0){   // un acumulado del mes no puede bajar
+    const dTxt0 = fmtNum(d, k.money).replace("$ -","-$ ");
+    if (sem.correcciones && sem.correcciones[k.id]) return {html:`<span class="pill warn" title="El ejecutivo indicó que corrige un dato mal cargado en el corte anterior">${dTxt0} (${antTxt}) · corrección</span>`, txt:`${dTxt0} (${antTxt}) - corrige el corte anterior`};
+    return {baja:true, html:`<span class="pill bad">Menor al corte anterior (${fmtNum(av,k.money)})</span><br><span class="why">El acumulado del mes no puede bajar.</span> <button class="linkbtn" data-corr="${k.id}">Es una corrección del corte anterior</button>`, txt:`${dTxt0} (${antTxt})`};
+  }
+  const dTxt = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
   return {html:`${dTxt} <span class="why">(${antTxt})</span>`, txt:`${dTxt} (${antTxt})`};
 }
 /* Calcula lo que va en las columnas Objetivo y Cumpl. para un indicador */
@@ -284,7 +295,8 @@ function evalInd(k, sem, ob, ant){
 const REV_LABELS = {autonomia:"Autonomía", organizacion:"Organización", tecnico:"Conocimiento técnico", negociacion:"Negociación", seguimiento:"Seguimiento"};
 const ETAPAS = ["Prospecto","Solicitud publicada","Carpeta en armado","Carpeta completa","En análisis de inversor","Oferta","En instrumentación","Otra"];
 const AREAS = ["Gerencia","Mesa de Inversores","Operaciones","Desarrollo","Otra"];
-const ESTADOS_COMP = ["Cumplido","Parcial","Pendiente"];
+const ESTADOS_COMP = ["Cumplido","Parcial","Pendiente","No es posible cumplir"];
+const CERRADO = e => e === "Cumplido" || e === "No es posible cumplir";   // estados que permiten eliminar
 const ROL = "cliente";
 const KEY = "meche_ficha_cliente_v1";
 
@@ -337,7 +349,7 @@ function nuevaSemana(fecha, rol, previa){
     ind[k.id] = null;   // producción y stock se vuelven a cargar en cada entrega (la anterior queda como referencia en «vs. corte ant.»)
   });
   const pendientes = previa ? [
-    ...previa.compromisosPrevios.filter(c => c.estado !== "Cumplido").map(c => ({texto:c.texto, fecha:c.fecha, resultado:c.resultado, desde:c.desde, estado:"", explicacion:""})),
+    ...previa.compromisosPrevios.map(c => clone(c)),   // quedan todos hasta que se eliminen manualmente
     ...previa.compromisosNuevos.filter(c => c.accion.trim()).map(c => ({texto:c.accion, fecha:c.fecha, resultado:c.resultado, desde:previa.fecha, estado:"", explicacion:""}))
   ] : [];
   return {
@@ -346,9 +358,11 @@ function nuevaSemana(fecha, rol, previa){
     oportunidades: previa ? clone(previa.oportunidades) : Array.from({length:5}, () => ({nombre:"",monto:null,etapa:"",bloqueo:"",accion:"",responsable:"",fecha:""})),
     balance: {logro:"", accionLogro:"", noAvanzo:"", causa:"", distinto:"", habilidad:""},
     compromisosPrevios: pendientes,
+    eliminados: previa ? clone(previa.eliminados || []) : [],   // eliminados sin estar cumplidos: visibles para Gerencia
     compromisosNuevos: Array.from({length:3}, () => ({accion:"",fecha:"",resultado:""})),
     apoyo: Array.from({length:3}, () => ({area:"",detalle:""})),
     revision: {autonomia:"",organizacion:"",tecnico:"",negociacion:"",seguimiento:""},
+    correcciones: {},
     editado: new Date().toISOString()
   };
 }
@@ -417,9 +431,13 @@ function renderStatus(){
   else if (S.pdf && S.pdf.fecha === S.actual.fecha) pdf = `<span class="pill bad">PDF actualizado pendiente de descargar</span>`;
   else pdf = `<span class="pill neutral">PDF sin descargar</span>`;
   const pend = f.length ? `<span class="pill warn" title="${esc(f.join(" · "))}">Falta: ${esc(f.join(" · "))}</span>` : `<span class="pill ok">Ficha completa</span>`;
-  el.innerHTML = save + pdf + pend;
-  const cb = $("b-cerrar"), why = $("why-cerrar");
-  if (cb){ cb.disabled = !pdfVigente(); why.textContent = pdfVigente() ? "" : "Para cerrar la semana primero descargá el PDF de la versión actual."; }
+  const B = bajas(S.actual, S.anterior);
+  const baja = B.length ? `<span class="pill bad">Revisá: ${B.length} acumulado${B.length>1?"s":""} menor${B.length>1?"es":""} al corte anterior</span>` : "";
+  el.innerHTML = save + pdf + baja + pend;
+  const cb = $("b-cerrar"), why = $("why-cerrar"), bp = $("b-pdf");
+  if (bp) bp.disabled = B.length > 0;
+  if (cb){ cb.disabled = !pdfVigente() || B.length > 0;
+    why.textContent = B.length ? `Revisá ${B.map(k=>k.n).join(", ")}: el acumulado del mes no puede ser menor al del corte anterior.` : pdfVigente() ? "" : "Para cerrar la semana primero descargá el PDF de la versión actual."; }
   // recordatorio de respaldo
   const dias = (Date.now() - new Date(S.respaldo || S.creado || Date.now()).getTime())/864e5;
   $("r-info").textContent = S.respaldo ? `Último respaldo: ${new Date(S.respaldo).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}` : "Todavía no descargaste ningún respaldo.";
@@ -434,11 +452,11 @@ function renderActual(){
   const mismoMes = ant && mesDe(ant.fecha) === mesDe(a.fecha);
   const fila = k => {
     const v = a.ind[k.id], E = evalInd(k, a, ob, ant);
-    const C = compAnt(k, a, ant), delta = C ? C.html : "–";
+    const C = compAnt(k, a, ant), delta = C ? C.html : "–", errCls = C && C.baja ? ' class="err"' : "";
     return `<tr>
       <td class="name">${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}${k.shared?'<span class="shared">Resultado compartido</span>':''}<small>${esc(k.d)}</small></td>
       ${k.t==="mes" ? `<td class="n" data-obj="${k.id}">${E.objHtml}</td>` : ""}
-      <td class="n"><input type="number" min="0" step="any" inputmode="decimal" data-ind="${k.id}" value="${v ?? ""}" placeholder="sin dato" aria-label="${esc(k.n)}"></td>
+      <td class="n"><input type="number" min="0" step="any" inputmode="decimal"${errCls} data-ind="${k.id}" value="${v ?? ""}" placeholder="sin dato" aria-label="${esc(k.n)}"></td>
       ${k.t==="mes" ? `<td class="n" data-pct="${k.id}">${E.cumHtml}</td>` : ""}
       <td class="n delta" data-delta="${k.id}">${delta}</td></tr>`;
   };
@@ -455,15 +473,24 @@ function renderActual(){
       <td>${esc(c.texto)}<small class="why" style="display:block">Asumido el ${fmtFecha(c.desde)}${c.resultado?` · Resultado esperado: ${esc(c.resultado)}`:""}</small></td>
       <td class="n">${fmtFecha(c.fecha) || "–"}</td>
       <td><select data-cp="${i}.estado"><option value="">Elegí…</option>${ESTADOS_COMP.map(e=>`<option ${c.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
-      <td><input data-cp="${i}.explicacion" value="${esc(c.explicacion)}" placeholder="Explicación breve"></td></tr>`).join("")
-    : `<tr><td colspan="4" class="why">No hay compromisos de la semana anterior. Se cargan solos cuando cerrás una semana.</td></tr>`;
+      <td><input data-cp="${i}.explicacion" value="${esc(c.explicacion)}" placeholder="Explicación breve"></td>
+      <td><button class="ghost" style="padding:6px 10px" data-del-cp="${i}">Eliminar</button></td></tr>`).join("")
+    : `<tr><td colspan="5" class="why">No hay compromisos anteriores. Se cargan solos cuando cerrás una semana y quedan acá hasta que los elimines.</td></tr>`;
+  const elim = (a.eliminados || []);
+  const elimRows = elim.map((c,i) => `<tr>
+      <td>${esc(c.texto)}<small class="why" style="display:block">Asumido el ${fmtFecha(c.desde)} · eliminado el ${fmtFecha(c.eliminadoEl)} con estado «${esc(c.estadoAlEliminar || "Sin estado")}»</small></td>
+      <td class="n">${fmtFecha(c.fecha) || "–"}</td>
+      <td><select data-el="${i}"><option value="">Sin estado</option>${ESTADOS_COMP.map(e=>`<option ${c.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
+      <td>${CERRADO(c.estado) ? `<button class="ghost" style="padding:6px 10px" data-del-el="${i}">Eliminar</button>` : ""}</td></tr>`).join("");
   const nuevos = a.compromisosNuevos.map((c,i) => `<tr>
       <td><input data-cn="${i}.accion" value="${esc(c.accion)}" placeholder="Acción específica"></td>
       <td><input data-cn="${i}.fecha" type="date" value="${esc(c.fecha)}"></td>
-      <td><input data-cn="${i}.resultado" value="${esc(c.resultado)}" placeholder="Resultado esperado"></td></tr>`).join("");
+      <td><input data-cn="${i}.resultado" value="${esc(c.resultado)}" placeholder="Resultado esperado"></td>
+      <td>${a.compromisosNuevos.length > 1 ? `<button class="ghost" style="padding:6px 10px" data-rm-cn="${i}" aria-label="Quitar fila">Quitar</button>` : ""}</td></tr>`).join("");
   const apoyo = a.apoyo.map((c,i) => `<tr>
       <td style="width:200px"><select data-ap="${i}.area"><option value=""></option>${AREAS.map(e=>`<option ${c.area===e?"selected":""}>${e}</option>`).join("")}</select></td>
-      <td><input data-ap="${i}.detalle" value="${esc(c.detalle)}" placeholder="Qué necesitás y para cuándo"></td></tr>`).join("");
+      <td><input data-ap="${i}.detalle" value="${esc(c.detalle)}" placeholder="Qué necesitás y para cuándo"></td>
+      <td>${a.apoyo.length > 1 ? `<button class="ghost" style="padding:6px 10px" data-rm-ap="${i}" aria-label="Quitar fila">Quitar</button>` : ""}</td></tr>`).join("");
   const B = a.balance;
   const revFilled = Object.values(a.revision).some(v => v.trim());
 
@@ -506,18 +533,24 @@ function renderActual(){
 
   <section class="panel">
     <h2><span class="tag">D</span>Compromisos anteriores</h2>
-    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th>Explicación</th></tr></thead><tbody>${prev}</tbody></table></div>
+    <p class="hint">Quedan acá, semana a semana, hasta que los elimines. Si eliminás uno que no está cumplido, pasa al listado de abajo.</p>
+    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th>Explicación</th><th></th></tr></thead><tbody>${prev}</tbody></table></div>
+    ${elim.length ? `<h3>Compromisos eliminados no cumplidos</h3>
+    <p class="hint">Se eliminaron sin estar cumplidos.</p>
+    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th></th></tr></thead><tbody>${elimRows}</tbody></table></div>` : ""}
   </section>
 
   <section class="panel">
     <h2><span class="tag">E</span>Compromisos nuevos</h2>
-    <p class="hint">Máximo 3, concretos y con fecha.</p>
-    <div class="scroll"><table class="opps"><thead><tr><th>Acción</th><th>Fecha</th><th>Resultado esperado</th></tr></thead><tbody>${nuevos}</tbody></table></div>
+    <p class="hint">Concretos y con fecha. Al cerrar la semana pasan a «Compromisos anteriores».</p>
+    <div class="scroll"><table class="opps"><thead><tr><th>Acción</th><th>Fecha</th><th>Resultado esperado</th><th></th></tr></thead><tbody>${nuevos}</tbody></table></div>
+    <div><button class="secondary" data-add="cn">+ Agregar compromiso</button></div>
   </section>
 
   <section class="panel">
     <h2><span class="tag">F</span>Apoyo requerido</h2>
-    <div class="scroll"><table class="opps"><thead><tr><th>Área</th><th>Detalle</th></tr></thead><tbody>${apoyo}</tbody></table></div>
+    <div class="scroll"><table class="opps"><thead><tr><th>Área</th><th>Detalle</th><th></th></tr></thead><tbody>${apoyo}</tbody></table></div>
+    <div><button class="secondary" data-add="ap">+ Agregar pedido de apoyo</button></div>
   </section>
 
   <details class="sec" ${revFilled?"open":""}>
@@ -553,10 +586,11 @@ function onEdit(e){
   if (t.dataset.ind){
     const v = num(t.value);
     if (v != null && (isNaN(v) || v < 0)){ t.classList.add("err"); return; }
-    t.classList.remove("err"); a.ind[t.dataset.ind] = v; ROLES[S.perfil.rol].ind.forEach(x => refreshIndicador(x.id));
+    t.classList.remove("err"); a.ind[t.dataset.ind] = v; if (a.correcciones) delete a.correcciones[t.dataset.ind]; ROLES[S.perfil.rol].ind.forEach(x => refreshIndicador(x.id));
   }
   else if (t.dataset.o){ const [i,f] = t.dataset.o.split("."); if (f==="monto"){ const v=num(t.value); if (v!=null&&(isNaN(v)||v<0)){t.classList.add("err");return;} t.classList.remove("err"); a.oportunidades[i][f]=v; } else a.oportunidades[i][f]=t.value; }
   else if (t.dataset.b) a.balance[t.dataset.b] = t.value;
+  else if (t.dataset.el !== undefined){ a.eliminados[t.dataset.el].estado = t.value; if (e.type === "change"){ persist(); renderActual(); } return; }
   else if (t.dataset.cp){ const [i,f] = t.dataset.cp.split("."); a.compromisosPrevios[i][f] = t.value; }
   else if (t.dataset.cn){ const [i,f] = t.dataset.cn.split("."); a.compromisosNuevos[i][f] = t.value; }
   else if (t.dataset.ap){ const [i,f] = t.dataset.ap.split("."); a.apoyo[i][f] = t.value; }
@@ -568,10 +602,12 @@ function onEdit(e){
 function refreshIndicador(id){
   const k = ROLES[S.perfil.rol].ind.find(x => x.id === id), a = S.actual, ant = S.anterior, v = a.ind[id];
   const E = evalInd(k, a, objetivos(a), ant);
-  const pc = document.querySelector(`[data-pct="${id}"]`); if (pc) pc.innerHTML = E.cumHtml;
-  const oc = document.querySelector(`[data-obj="${id}"]`); if (oc) oc.innerHTML = E.objHtml;
-  const dc = document.querySelector(`[data-delta="${id}"]`);
-  if (dc){ const C = compAnt(k, a, ant); dc.innerHTML = C ? C.html : "–"; }
+  const put = (el, h) => { if (el && el._h !== h){ el.innerHTML = h; el._h = h; } };   // solo si cambió (no reemplaza botones mientras se hace clic)
+  put(document.querySelector(`[data-pct="${id}"]`), E.cumHtml);
+  put(document.querySelector(`[data-obj="${id}"]`), E.objHtml);
+  const C = compAnt(k, a, ant);
+  put(document.querySelector(`[data-delta="${id}"]`), C ? C.html : "–");
+  const inp = document.querySelector(`[data-ind="${id}"]`); if (inp && !(v < 0)) inp.classList.toggle("err", !!(C && C.baja));
 }
 function cambiarFecha(e){
   const v = e.target.value, a = S.actual;
@@ -597,12 +633,20 @@ function renderAnterior(){
   const el = $("v-anterior");
   if (!S.anterior){ el.innerHTML = `<h2>Semana anterior</h2><p class="hint">Todavía no cerraste ninguna semana. Cuando cierres la actual, va a aparecer acá en modo consulta.</p>`; return; }
   const s = S.anterior, r = ROLES[S.perfil.rol], ob = s.objetivosUsados || {};
-  const ind = r.ind.map(k => { const E = evalInd(k, s, ob, null);
-    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${k.t==="mes"?"Acumulado del mes":"Estado actual"}</small></td><td class="n">${k.t==="mes"?E.objHtml:"—"}</td><td class="n">${fmtNum(s.ind[k.id],k.money)}</td><td class="n">${k.t==="mes"?E.cumHtml:"–"}</td></tr>`; }).join("");
+  const act = S.actual;
+  const ind = r.ind.map(k => { const E = evalInd(k, s, ob, null), av = s.ind[k.id], cv = act.ind[k.id];
+    let dif = '<span class="why">sin cargar</span>';
+    if (cv != null && av != null){
+      if (k.t === "mes" && mesDe(act.fecha) !== mesDe(s.fecha)) dif = '<span class="why">otro mes</span>';
+      else { const d = cv - av; dif = `<span class="pill ${d>0?"ok":d<0?"bad":"neutral"}">${d>0?"↑ +":d<0?"↓ ":"= "}${fmtNum(d,k.money).replace("$ -","-$ ")}</span>`; }
+    }
+    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${esc(k.d)}</small></td>
+      <td class="n">${k.t==="mes"?E.objHtml:"—"}</td><td class="n"><b>${fmtNum(av,k.money)}</b></td><td class="n">${k.t==="mes"?E.cumHtml:"–"}</td>
+      <td class="n">${fmtNum(cv,k.money)}</td><td class="n">${dif}</td></tr>`; }).join("");
   const opp = s.oportunidades.filter(o=>o.nombre.trim()).map(o=>`<tr><td>${esc(o.nombre)}</td><td class="n">${o.monto!=null?fmtNum(o.monto,true):"–"}</td><td>${esc(o.etapa)}</td><td>${esc(o.bloqueo)}</td><td>${esc(o.accion)}</td><td>${esc(o.responsable)}</td><td>${fmtFecha(o.fecha)}</td></tr>`).join("") || `<tr><td colspan="7" class="why">Sin oportunidades cargadas.</td></tr>`;
   const B = s.balance;
   el.innerHTML = `<h2>Semana anterior · corte ${fmtFecha(s.fecha)} <span class="pill neutral">Solo lectura · cerrada el ${new Date(s.cerradaEn).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}</span></h2>
-    <h3>Indicadores</h3><div class="scroll"><table><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Valor</th><th class="n">Cumpl.</th></tr></thead><tbody>${ind}</tbody></table></div>
+    <h3>Indicadores · cómo avanzó al corte actual</h3><div class="scroll"><table><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Corte ${fmtFecha(s.fecha)}</th><th class="n">Cumpl.</th><th class="n">Corte actual ${fmtFecha(act.fecha)}</th><th class="n">Diferencia</th></tr></thead><tbody>${ind}</tbody></table></div>
     ${r.extra && s.extra ? `<dl><dt>${esc(r.extra.n)}</dt><dd>${esc(s.extra)}</dd></dl>`:""}
     <h3>Oportunidades prioritarias</h3><div class="scroll"><table><thead><tr><th>Empresa / ID</th><th class="n">Monto</th><th>Etapa</th><th>Bloqueo</th><th>Próxima acción</th><th>Resp.</th><th>Fecha</th></tr></thead><tbody>${opp}</tbody></table></div>
     <h3>Balance</h3><dl>
@@ -610,6 +654,7 @@ function renderAnterior(){
       <dt>No avanzó</dt><dd>${esc(B.noAvanzo)||"–"}</dd><dt>Causa</dt><dd>${esc(B.causa)||"–"}</dd>
       <dt>Qué haría distinto</dt><dd>${esc(B.distinto)||"–"}</dd><dt>Habilidad a desarrollar</dt><dd>${esc(B.habilidad)||"–"}</dd></dl>
     <h3>Compromisos anteriores</h3><dl>${s.compromisosPrevios.map(c=>`<dt>${esc(c.estado||"Sin estado")}</dt><dd>${esc(c.texto)}${c.explicacion?` — ${esc(c.explicacion)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
+    ${(s.eliminados||[]).length ? `<h3>Compromisos eliminados no cumplidos</h3><dl>${s.eliminados.map(c=>`<dt>${esc(c.estado||"Sin estado")}</dt><dd>${esc(c.texto)} <span class="why">(eliminado el ${fmtFecha(c.eliminadoEl)})</span></dd>`).join("")}</dl>` : ""}
     <h3>Compromisos asumidos</h3><dl>${s.compromisosNuevos.filter(c=>c.accion.trim()).map(c=>`<dt>${fmtFecha(c.fecha)||"Sin fecha"}</dt><dd>${esc(c.accion)}${c.resultado?` → ${esc(c.resultado)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
     <h3>Apoyo requerido</h3><dl>${s.apoyo.filter(x=>x.detalle.trim()).map(x=>`<dt>${esc(x.area||"–")}</dt><dd>${esc(x.detalle)}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>`;
 }
@@ -655,7 +700,8 @@ function construirPDF(sem, version){
   titulo("C. Balance de la semana");
   tabla(["Tema","Respuesta"], [["Principal logro",B.logro],["Acción que lo produjo",B.accionLogro],["Oportunidad que no avanzó",B.noAvanzo],["Causa",B.causa],["Qué podría haber hecho distinto",B.distinto],["Habilidad a desarrollar",B.habilidad]].map(([a,b])=>[a,b.trim()||"–"]), {columnStyles:{0:{cellWidth:52,fontStyle:"bold"}}});
   titulo("D. Compromisos anteriores");
-  tabla(["Compromiso","Fecha","Estado","Explicación"], sem.compromisosPrevios.length ? sem.compromisosPrevios.map(c=>[c.texto, fmtFecha(c.fecha)||"–", c.estado||"Sin estado", c.explicacion||"–"]) : [["No había compromisos anteriores","","",""]]);
+  tabla(["Compromiso","Asumido","Fecha","Estado","Explicación"], sem.compromisosPrevios.length ? sem.compromisosPrevios.map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", c.estado||"Sin estado", c.explicacion||"–"]) : [["No hay compromisos anteriores","","","",""]]);
+  if ((sem.eliminados || []).length){ titulo("D. Compromisos eliminados no cumplidos"); tabla(["Compromiso","Asumido","Eliminado","Estado al eliminar","Estado actual"], sem.eliminados.map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.eliminadoEl)||"–", c.estadoAlEliminar||"Sin estado", c.estado||"Sin estado"]), {headStyles:{fillColor:[248,222,219], textColor:[120,30,25], fontStyle:"bold"}}); }
   const nv = sem.compromisosNuevos.filter(c=>c.accion.trim());
   titulo("E. Compromisos nuevos");
   tabla(["Acción","Fecha","Resultado esperado"], nv.length ? nv.map(c=>[c.accion, fmtFecha(c.fecha)||"–", c.resultado||"–"]) : [["Sin compromisos nuevos","",""]]);
@@ -673,6 +719,8 @@ function construirPDF(sem, version){
 function nombreArchivo(sem){ const n = S.perfil.nombre.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,""); return `MeChe_GestionSemanal_${n}_${sem.fecha}.pdf`; }
 function descargarPDF(){
   persist();
+  const B = bajas(S.actual, S.anterior);
+  if (B.length) return modal(`<h2>Revisá los acumulados</h2><p>${esc(B.map(k=>k.n).join(", "))}: el acumulado del mes no puede ser menor al del corte anterior. Corregí el dato o, si el anterior estaba mal cargado, marcá «Es una corrección del corte anterior».</p>`, [{t:"Entendido", c:"primary"}]);
   const h = contenidoHash(S.actual);
   const version = (S.pdf && S.pdf.fecha === S.actual.fecha) ? (S.pdf.hash === h ? S.pdf.version : S.pdf.version + 1) : 1;
   let doc;
@@ -792,8 +840,50 @@ $("b-reset").onclick = () => modal(`<h2>Borrar la ficha de este navegador</h2><p
   () => { $("m-txt").oninput = e => $("m-del").disabled = e.target.value.trim().toUpperCase() !== "BORRAR"; });
 
 setup();
+$("ver").textContent = "Versión " + APP_VERSION;
 $("v-actual").addEventListener("input", onEdit);
 $("v-actual").addEventListener("change", onEdit);
+$("v-actual").addEventListener("click", e => {
+  const add = e.target.closest("[data-add]"), rm = e.target.closest("[data-rm-cn],[data-rm-ap]");
+  if (add){
+    if (add.dataset.add === "cn") S.actual.compromisosNuevos.push({accion:"",fecha:"",resultado:""});
+    else S.actual.apoyo.push({area:"",detalle:""});
+    persist(); renderActual();
+    const sel = add.dataset.add === "cn" ? `[data-cn="${S.actual.compromisosNuevos.length-1}.accion"]` : `[data-ap="${S.actual.apoyo.length-1}.area"]`;
+    const el = document.querySelector(sel); if (el) el.focus();
+    return;
+  }
+  if (rm){
+    const lista = rm.dataset.rmCn !== undefined ? S.actual.compromisosNuevos : S.actual.apoyo, i = Number(rm.dataset.rmCn ?? rm.dataset.rmAp);
+    const vacia = Object.values(lista[i]).every(v => !String(v||"").trim());
+    const quitar = () => { lista.splice(i,1); persist(); renderActual(); };
+    if (vacia) quitar(); else modal(`<h2>Quitar fila</h2><p>Se borra lo que escribiste en esta fila.</p>`, [{t:"Cancelar",c:"ghost"},{t:"Quitar",c:"primary",f:quitar}]);
+    return;
+  }
+  const dcp = e.target.closest("[data-del-cp]"), del = e.target.closest("[data-del-el]");
+  if (dcp){
+    const i = Number(dcp.dataset.delCp), c = S.actual.compromisosPrevios[i];
+    if (CERRADO(c.estado)){
+      modal(`<h2>Eliminar compromiso</h2><p>«${esc(c.texto)}» está marcado como «${esc(c.estado)}» y se va a eliminar de la ficha.</p>`,
+        [{t:"Cancelar",c:"ghost"},{t:"Eliminar",c:"primary",f:()=>{ S.actual.compromisosPrevios.splice(i,1); persist(); renderActual(); }}]);
+    } else {
+      modal(`<h2>Eliminar compromiso no cumplido</h2><p>«${esc(c.texto)}» no está marcado como cumplido (estado: ${esc(c.estado || "sin estado")}).</p><p>Va a pasar al listado de <b>compromisos eliminados no cumplidos</b>, que se ve en la ficha y en el PDF.</p>`,
+        [{t:"Cancelar",c:"ghost"},{t:"Eliminar igual",c:"primary",f:()=>{ const x = S.actual.compromisosPrevios.splice(i,1)[0]; S.actual.eliminados = S.actual.eliminados || []; S.actual.eliminados.push(Object.assign(x, {eliminadoEl: isoLocal(new Date()), estadoAlEliminar: x.estado || "Sin estado"})); persist(); renderActual(); }}]);
+    }
+    return;
+  }
+  if (del){
+    const i = Number(del.dataset.delEl), c = S.actual.eliminados[i];
+    if (!CERRADO(c.estado)) return;
+    modal(`<h2>Eliminar definitivamente</h2><p>«${esc(c.texto)}» quedó marcado como «${esc(c.estado)}» y se va a borrar del listado.</p>`,
+      [{t:"Cancelar",c:"ghost"},{t:"Eliminar",c:"primary",f:()=>{ S.actual.eliminados.splice(i,1); persist(); renderActual(); }}]);
+    return;
+  }
+  const b = e.target.closest("[data-corr]"); if (!b) return;
+  const id = b.dataset.corr, k = ROLES[S.perfil.rol].ind.find(x => x.id === id);
+  modal(`<h2>Corregir el corte anterior</h2><p>Vas a cargar en <b>${esc(k.n)}</b> un acumulado menor al del corte anterior (${fmtNum(S.anterior.ind[id], k.money)}). Hacelo solo si el dato anterior estaba mal cargado. En el PDF va a figurar como corrección.</p>`,
+    [{t:"Cancelar", c:"ghost"}, {t:"Sí, es una corrección", c:"primary", f:() => { S.actual.correcciones = S.actual.correcciones || {}; S.actual.correcciones[id] = true; refreshIndicador(id); scheduleSave(); }}]);
+});
 S = load();
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
 renderAll();
