@@ -166,7 +166,7 @@ const OBJETIVOS = {
 };
 // Volumen: siempre en MILLONES de pesos (1600 = $ 1.600 M).
 // Además del objetivo por rol, se puede cargar uno por persona: "2026-11": { cliente: {...}, "Nombre Apellido": { carpetas_completadas: 45 } }
-const APP_VERSION = "1.16 · 25/10/2026";
+const APP_VERSION = "1.17 · 25/10/2026";
 
 /* ================= DEFINICIÓN DE ROLES ================= */
 // t: "mes" = producción acumulada del mes (día 1 al jueves de corte) · "stock" = foto del estado actual
@@ -536,9 +536,9 @@ function renderActual(){
 
   <section class="panel">
     <h2><span class="tag">B</span>Oportunidades prioritarias</h2>
-    <p class="hint">Hasta 5 casos relevantes, no toda la cartera. Usá nombre de la empresa o un ID; no cargues CUIT ni datos personales.</p>
+    <p class="hint">Los casos relevantes, no toda la cartera. Usá nombre de la empresa o un ID; no cargues CUIT ni datos personales.</p>
     <div class="scroll"><table class="opps"><thead><tr><th>Empresa / ID</th><th>Monto ($)</th><th>Etapa</th><th>Próxima acción</th><th>Responsable</th><th>Fecha</th><th>Comentario</th><th></th></tr></thead><tbody>${opps || '<tr><td colspan="8" class="why">Sin oportunidades. Agregá una con el botón.</td></tr>'}</tbody></table></div>
-    ${a.oportunidades.length < 5 ? '<div><button class="secondary" data-add="opp">+ Agregar oportunidad</button></div>' : ""}
+    <div><button class="secondary" data-add="opp">+ Agregar oportunidad</button></div>
     ${oppsEl ? `<h3>Oportunidades eliminadas</h3><div class="scroll"><table class="opps"><thead><tr><th>Oportunidad</th><th>Motivo</th></tr></thead><tbody>${oppsEl}</tbody></table></div>` : ""}
   </section>
 
@@ -919,7 +919,7 @@ $("v-actual").addEventListener("click", e => {
   const add = e.target.closest("[data-add]"), rm = e.target.closest("[data-rm-cn],[data-rm-ap]");
   if (add){
     if (add.dataset.add === "cn") S.actual.compromisosNuevos.push({accion:"",fecha:"",resultado:""});
-    else if (add.dataset.add === "opp"){ if (S.actual.oportunidades.length < 5) S.actual.oportunidades.push({nombre:"",monto:null,etapa:"",bloqueo:"",accion:"",responsable:"",fecha:""}); persist(); renderActual(); return; }
+    else if (add.dataset.add === "opp"){ S.actual.oportunidades.push({nombre:"",monto:null,etapa:"",bloqueo:"",accion:"",responsable:"",fecha:""}); persist(); renderActual(); return; }
     else S.actual.apoyo.push({area:"",detalle:""});
     persist(); renderActual();
     const sel = add.dataset.add === "cn" ? `[data-cn="${S.actual.compromisosNuevos.length-1}.accion"]` : `[data-ap="${S.actual.apoyo.length-1}.area"]`;
