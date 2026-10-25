@@ -166,7 +166,7 @@ const OBJETIVOS = {
 };
 // Volumen: siempre en MILLONES de pesos (1600 = $ 1.600 M).
 // Además del objetivo por rol, se puede cargar uno por persona: "2026-11": { cliente: {...}, "Nombre Apellido": { carpetas_completadas: 45 } }
-const APP_VERSION = "1.15 · 25/10/2026";
+const APP_VERSION = "1.16 · 25/10/2026";
 
 /* ================= DEFINICIÓN DE ROLES ================= */
 // t: "mes" = producción acumulada del mes (día 1 al jueves de corte) · "stock" = foto del estado actual
@@ -242,7 +242,12 @@ const PROMEDIOS = {
 };
 const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
 /* Columna «vs. corte ant.»: diferencia + valor de la entrega anterior (o solo el valor anterior si todavía no se cargó el nuevo) */
-const MAX_HISTORICO = 10;
+const MAX_HISTORICO = 5, MAX_OPPS_ELIM = 5, MAX_CUMPLIDOS = 5;
+function pushTope(arr, item, campo, max){   // agrega y deja solo los últimos "max" según la fecha/hora del campo
+  arr.push(item); arr.sort((x,y) => String(x[campo]||"").localeCompare(String(y[campo]||"")));
+  while (arr.length > max) arr.shift();
+}
+const recientes = (arr, campo) => (arr || []).map((o,i) => ({o,i})).sort((x,y) => String(y.o[campo]||"").localeCompare(String(x.o[campo]||"")));
 function agregarHistorico(sem, c){
   sem.eliminados = sem.eliminados || [];
   sem.eliminados.push(Object.assign(c, {eliminadoEl: isoLocal(new Date()), eliminadoAt: new Date().toISOString(), estadoAlEliminar: c.estado || "Sin estado"}));
@@ -368,9 +373,10 @@ function nuevaSemana(fecha, rol, previa){
     extra: previa ? (previa.extra || "") : "",
     oportunidades: previa ? clone(previa.oportunidades) : Array.from({length:5}, () => ({nombre:"",monto:null,etapa:"",bloqueo:"",accion:"",responsable:"",fecha:""})),
     balance: {logro:"", accionLogro:"", noAvanzo:"", causa:"", distinto:"", habilidad:"", mejorAccion:"", dificultad:"", dificultadDetalle:"", proximaMejora:"", gerencia:""},
-    oppsEliminadas: [],
+    oppsEliminadas: previa ? clone(previa.oppsEliminadas || []) : [],   // últimas 5 eliminadas
+    cumplidos: previa ? clone(previa.cumplidos || []) : [],             // últimos 5 compromisos cumplidos
     compromisosPrevios: pendientes,
-    eliminados: previa ? clone(previa.eliminados || []) : [],   // histórico de compromisos eliminados (máx. 10, sale el más viejo)
+    eliminados: previa ? clone(previa.eliminados || []) : [],   // histórico de compromisos eliminados (máx. 5, sale el más viejo)
     compromisosNuevos: Array.from({length:3}, () => ({accion:"",fecha:"",resultado:""})),
     apoyo: Array.from({length:3}, () => ({area:"",detalle:""})),
     revision: {autonomia:"",organizacion:"",tecnico:"",negociacion:"",seguimiento:""},
@@ -481,7 +487,7 @@ function renderActual(){
       <td><input data-o="${i}.fecha" type="date" value="${esc(o.fecha)}"></td>
       <td><input data-o="${i}.bloqueo" value="${esc(o.bloqueo)}" placeholder="Comentario"></td>
       <td><button class="ghost" style="padding:6px 9px" data-del-opp="${i}" title="Eliminar oportunidad" aria-label="Eliminar oportunidad">✕</button></td></tr>`).join("");
-  const oppsEl = (a.oppsEliminadas || []).map((o,i) => `<tr>
+  const oppsEl = recientes(a.oppsEliminadas, "eliminadaAt").map(({o,i}) => `<tr>
       <td>${esc(o.nombre)}<small class="why" style="display:block">${o.monto!=null?fmtNum(o.monto,true)+" · ":""}${esc(o.etapa||"sin etapa")} · eliminada el ${fmtFecha(o.eliminadaEl)}</small></td>
       <td><input data-oe="${i}" value="${esc(o.motivo)}" placeholder="Motivo de la eliminación"></td></tr>`).join("");
   const prev = a.compromisosPrevios.length ? a.compromisosPrevios.map((c,i) => `<tr>
@@ -560,8 +566,10 @@ function renderActual(){
 
   <section class="panel">
     <h2><span class="tag">D</span>Compromisos anteriores</h2>
-    <p class="hint">Quedan acá, semana a semana, hasta que los elimines. Todo compromiso eliminado pasa al histórico.</p>
+    <p class="hint">Quedan acá, semana a semana, hasta que se cumplan o los elimines. Al marcarlo «Cumplido» pasa a Compromisos cumplidos; si lo eliminás, pasa al histórico.</p>
     <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th>Explicación</th><th></th></tr></thead><tbody>${prev}</tbody></table></div>
+    ${(a.cumplidos||[]).length ? `<h3>Compromisos cumplidos</h3>
+    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha comprometida</th><th class="n">Cumplido</th><th>Explicación</th></tr></thead><tbody>${recientes(a.cumplidos,"cumplidoAt").map(({o:c}) => `<tr><td>${esc(c.texto)}<small class="why" style="display:block">Asumido el ${fmtFecha(c.desde)}</small></td><td class="n">${fmtFecha(c.fecha)||"–"}</td><td class="n"><span class="pill ok">${fmtFecha(c.cumplidoEl)}</span></td><td>${esc(c.explicacion)||"–"}</td></tr>`).join("")}</tbody></table></div>` : ""}
     ${elim.length ? `<h3>Histórico de compromisos</h3>
     <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha comprometida</th><th class="n">Eliminado</th><th>Estado al eliminar</th></tr></thead><tbody>${elimRows}</tbody></table></div>` : ""}
   </section>
@@ -617,7 +625,12 @@ function onEdit(e){
   else if (t.dataset.o){ const [i,f] = t.dataset.o.split("."); if (f==="monto"){ const v=num(t.value); if (v!=null&&(isNaN(v)||v<0)){t.classList.add("err");return;} t.classList.remove("err"); a.oportunidades[i][f]=v; } else a.oportunidades[i][f]=t.value; }
   else if (t.dataset.b) a.balance[t.dataset.b] = t.value;
   else if (t.dataset.oe !== undefined) a.oppsEliminadas[t.dataset.oe].motivo = t.value;
-  else if (t.dataset.cp){ const [i,f] = t.dataset.cp.split("."); a.compromisosPrevios[i][f] = t.value; }
+  else if (t.dataset.cp){ const [i,f] = t.dataset.cp.split("."); a.compromisosPrevios[i][f] = t.value;
+    if (f === "estado" && t.value === "Cumplido" && e.type === "change"){
+      const x = a.compromisosPrevios.splice(Number(i),1)[0]; a.cumplidos = a.cumplidos || [];
+      pushTope(a.cumplidos, Object.assign(x, {cumplidoEl: isoLocal(new Date()), cumplidoAt: new Date().toISOString()}), "cumplidoAt", MAX_CUMPLIDOS);
+      persist(); renderActual(); toast("Compromiso cumplido: pasó al listado de cumplidos"); return;
+    } }
   else if (t.dataset.cn){ const [i,f] = t.dataset.cn.split("."); a.compromisosNuevos[i][f] = t.value; }
   else if (t.dataset.ap){ const [i,f] = t.dataset.ap.split("."); a.apoyo[i][f] = t.value; }
   else if (t.dataset.rv) a.revision[t.dataset.rv] = t.value;
@@ -675,7 +688,7 @@ function renderAnterior(){
     <h3>Indicadores · cómo avanzó al corte actual</h3><div class="scroll"><table><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Corte ${fmtFecha(s.fecha)}</th><th class="n">Cumpl.</th><th class="n">Corte actual ${fmtFecha(act.fecha)}</th><th class="n">Diferencia</th></tr></thead><tbody>${ind}</tbody></table></div>
     ${r.extra && s.extra ? `<dl><dt>${esc(r.extra.n)}</dt><dd>${esc(s.extra)}</dd></dl>`:""}
     <h3>Oportunidades prioritarias</h3><div class="scroll"><table><thead><tr><th>Empresa / ID</th><th class="n">Monto</th><th>Etapa</th><th>Próxima acción</th><th>Resp.</th><th>Fecha</th><th>Comentario</th></tr></thead><tbody>${opp}</tbody></table></div>
-    ${(s.oppsEliminadas||[]).length ? `<h3>Oportunidades eliminadas</h3><dl>${s.oppsEliminadas.map(o=>`<dt>${esc(o.nombre)}</dt><dd>${esc(o.motivo)||"<span class='why'>Sin motivo</span>"}</dd>`).join("")}</dl>` : ""}
+    ${(s.oppsEliminadas||[]).length ? `<h3>Oportunidades eliminadas</h3><dl>${recientes(s.oppsEliminadas,"eliminadaAt").map(({o})=>`<dt>${esc(o.nombre)}</dt><dd>${esc(o.motivo)||"<span class='why'>Sin motivo</span>"}</dd>`).join("")}</dl>` : ""}
     ${r.analisis ? `<h3>Análisis y mejora de la gestión comercial</h3><dl>
       <dt>Acción con mejores resultados</dt><dd>${esc(B.mejorAccion)||"–"}</dd>
       <dt>Qué más dificultó avanzar</dt><dd>${esc(B.dificultad)||"–"}${B.dificultadDetalle?` — ${esc(B.dificultadDetalle)}`:""}</dd>
@@ -685,6 +698,7 @@ function renderAnterior(){
       <dt>No avanzó</dt><dd>${esc(B.noAvanzo)||"–"}</dd><dt>Causa</dt><dd>${esc(B.causa)||"–"}</dd>
       <dt>Qué haría distinto</dt><dd>${esc(B.distinto)||"–"}</dd><dt>Habilidad a desarrollar</dt><dd>${esc(B.habilidad)||"–"}</dd></dl>`}
     <h3>Compromisos anteriores</h3><dl>${s.compromisosPrevios.map(c=>`<dt>${esc(c.estado||"Sin estado")}</dt><dd>${esc(c.texto)}${c.explicacion?` — ${esc(c.explicacion)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
+    ${(s.cumplidos||[]).length ? `<h3>Compromisos cumplidos</h3><dl>${recientes(s.cumplidos,"cumplidoAt").map(({o:c})=>`<dt>${fmtFecha(c.cumplidoEl)}</dt><dd>${esc(c.texto)}</dd>`).join("")}</dl>` : ""}
     ${(s.eliminados||[]).length ? `<h3>Histórico de compromisos</h3><dl>${historicoOrdenado(s).map(c=>`<dt>${esc(c.estadoAlEliminar||"Sin estado")}</dt><dd>${esc(c.texto)} <span class="why">(eliminado el ${fmtFecha(c.eliminadoEl)})</span></dd>`).join("")}</dl>` : ""}
     <h3>Compromisos asumidos</h3><dl>${s.compromisosNuevos.filter(c=>c.accion.trim()).map(c=>`<dt>${fmtFecha(c.fecha)||"Sin fecha"}</dt><dd>${esc(c.accion)}${c.resultado?` → ${esc(c.resultado)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
     <h3>Apoyo requerido</h3><dl>${s.apoyo.filter(x=>x.detalle.trim()).map(x=>`<dt>${esc(x.area||"–")}</dt><dd>${esc(x.detalle)}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>`;
@@ -733,7 +747,7 @@ function construirPDF(sem, version){
   const opps = sem.oportunidades.filter(o=>o.nombre.trim());
   titulo("B. Oportunidades prioritarias");
   tabla(["Empresa / ID","Monto","Etapa","Próxima acción","Resp.","Fecha","Comentario"], opps.length ? opps.map(o=>[o.nombre, o.monto!=null?fmtNum(o.monto,true):"–", o.etapa, o.accion, o.responsable, fmtFecha(o.fecha), o.bloqueo]) : [["Sin oportunidades cargadas","","","","","",""]]);
-  if ((sem.oppsEliminadas||[]).length){ titulo("B. Oportunidades eliminadas"); tabla(["Oportunidad","Monto","Etapa","Eliminada","Motivo"], sem.oppsEliminadas.map(o=>[o.nombre||"Sin nombre", o.monto!=null?fmtNum(o.monto,true):"–", o.etapa||"–", fmtFecha(o.eliminadaEl), o.motivo||"Sin motivo"])); }
+  if ((sem.oppsEliminadas||[]).length){ titulo("B. Oportunidades eliminadas (últimas 5)"); tabla(["Oportunidad","Monto","Etapa","Eliminada","Motivo"], recientes(sem.oppsEliminadas,"eliminadaAt").map(({o})=>[o.nombre||"Sin nombre", o.monto!=null?fmtNum(o.monto,true):"–", o.etapa||"–", fmtFecha(o.eliminadaEl), o.motivo||"Sin motivo"])); }
   const B = sem.balance;
   if (r.analisis){
     titulo("C. Análisis y mejora de la gestión comercial");
@@ -744,7 +758,8 @@ function construirPDF(sem, version){
   }
   titulo("D. Compromisos anteriores");
   tabla(["Compromiso","Asumido","Fecha","Estado","Explicación"], sem.compromisosPrevios.length ? sem.compromisosPrevios.map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", c.estado||"Sin estado", c.explicacion||"–"]) : [["No hay compromisos anteriores","","","",""]]);
-  if ((sem.eliminados || []).length){ titulo("D. Histórico de compromisos (últimos 10 eliminados)"); tabla(["Compromiso","Asumido","Fecha comprometida","Eliminado","Estado al eliminar"], historicoOrdenado(sem).map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", fmtFecha(c.eliminadoEl)||"–", c.estadoAlEliminar||"Sin estado"])); }
+  if ((sem.cumplidos || []).length){ titulo("D. Compromisos cumplidos (últimos 5)"); tabla(["Compromiso","Asumido","Fecha comprometida","Cumplido","Explicación"], recientes(sem.cumplidos,"cumplidoAt").map(({o:c})=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", fmtFecha(c.cumplidoEl)||"–", c.explicacion||"–"])); }
+  if ((sem.eliminados || []).length){ titulo("D. Histórico de compromisos (últimos 5 eliminados)"); tabla(["Compromiso","Asumido","Fecha comprometida","Eliminado","Estado al eliminar"], historicoOrdenado(sem).map(c=>[c.texto, fmtFecha(c.desde)||"–", fmtFecha(c.fecha)||"–", fmtFecha(c.eliminadoEl)||"–", c.estadoAlEliminar||"Sin estado"])); }
   const nv = sem.compromisosNuevos.filter(c=>c.accion.trim());
   titulo("E. Compromisos nuevos");
   tabla(["Acción","Fecha","Resultado esperado"], nv.length ? nv.map(c=>[c.accion, fmtFecha(c.fecha)||"–", c.resultado||"–"]) : [["Sin compromisos nuevos","",""]]);
@@ -926,7 +941,7 @@ $("v-actual").addEventListener("click", e => {
     modal(`<h2>Eliminar oportunidad</h2><p>«${esc(o.nombre || "Sin nombre")}» pasa a <b>Oportunidades eliminadas</b>, que figura en la ficha y en el PDF.</p><label class="f">Motivo<textarea id="m-motivo" placeholder="Ej.: el cliente desistió por tasa"></textarea></label>`,
       [{t:"Cancelar",c:"ghost"},{t:"Eliminar",c:"primary",f:()=>{}}]);
     const btn = document.querySelector(".modal button.primary");
-    btn.onclick = () => { const motivo = $("m-motivo").value.trim(); $("modal-root").innerHTML = ""; const x = S.actual.oportunidades.splice(i,1)[0]; S.actual.oppsEliminadas = S.actual.oppsEliminadas || []; S.actual.oppsEliminadas.push(Object.assign(x, {motivo, eliminadaEl: isoLocal(new Date())})); persist(); renderActual(); };
+    btn.onclick = () => { const motivo = $("m-motivo").value.trim(); $("modal-root").innerHTML = ""; const x = S.actual.oportunidades.splice(i,1)[0]; S.actual.oppsEliminadas = S.actual.oppsEliminadas || []; pushTope(S.actual.oppsEliminadas, Object.assign(x, {motivo, eliminadaEl: isoLocal(new Date()), eliminadaAt: new Date().toISOString()}), "eliminadaAt", MAX_OPPS_ELIM); persist(); renderActual(); };
     return;
   }
   const dcp = e.target.closest("[data-del-cp]");
