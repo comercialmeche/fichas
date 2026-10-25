@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#007241">
+<title>MeChe · Ficha Atención al Cliente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  --bg:#f2f5f3; --surface:#fff; --surface-2:#e9f1ec; --line:#d3dfd7;
+  --fg:#15231b; --muted:#5a6a61; --brand:#007241; --brand-ink:#fff; --brand-soft:#d5eadf;
+  --ok:#0f7a3d; --ok-bg:#dcf1e3; --warn:#8f5b00; --warn-bg:#fbefd2; --bad:#b3261e; --bad-bg:#f8dedb; --info-bg:#e4ecf7; --info:#244a7a;
+  --display:"Archivo",system-ui,sans-serif; --body:"Source Sans 3",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 var(--body)}
+.wrap{max-width:1080px;margin:0 auto;padding:16px 16px 64px;display:grid;gap:16px}
+header.hd{background:var(--brand);color:var(--brand-ink)}
+header.hd .in{max-width:1080px;margin:0 auto;padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:space-between}
+.brand{font:800 18px/1 var(--display);letter-spacing:.01em}
+.brand small{display:block;font:600 12px var(--body);opacity:.85;letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px}
+.meta b{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.8;font-weight:600}
+.statusbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-weight:600;font-size:13px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.bad{background:var(--bad-bg);color:var(--bad)}.pill.neutral{background:var(--surface-2);color:var(--muted)}.pill.info{background:var(--info-bg);color:var(--info)}
+.tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px;width:max-content;max-width:100%;overflow-x:auto}
+.tabs button{border:0;background:transparent;color:var(--muted);font:600 15px var(--body);padding:8px 14px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgb(0 0 0/.08)}
+.stack{display:grid;gap:16px}
+[hidden]{display:none!important}
+.wrap,.stack{grid-template-columns:minmax(0,1fr)}
+.wrap>*,.stack>*{min-width:0}
+.statusbar{min-width:0}
+.statusbar .pill{white-space:normal}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;gap:14px;min-width:0}
+h2{font:700 18px/1.2 var(--display);margin:0;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+h2 .tag{font:700 12px var(--display);color:var(--brand);background:var(--brand-soft);border-radius:6px;padding:2px 7px}
+h3{font:700 14px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--brand);margin:6px 0 0}
+.hint{font-size:14px;color:var(--muted);margin:0}
+.banner{border-radius:10px;padding:12px 14px;font-size:15px}
+.banner.warn{background:var(--warn-bg)} .banner.bad{background:var(--bad-bg)} .banner.info{background:var(--info-bg)}
+label.f{display:grid;gap:5px;font-weight:600;font-size:14px;color:var(--muted)}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+textarea{min-height:72px;resize:vertical}
+input[readonly],textarea[readonly]{background:var(--surface-2)}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+input.err{border-color:var(--bad);background:var(--bad-bg)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th{font:600 12px var(--display);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.name{min-width:220px} td.name small{display:block;color:var(--muted);font-size:13px}
+.ind input{width:130px;text-align:right}
+.opps input,.opps select{min-width:110px}
+.opps input[data-o$=".nombre"]{min-width:180px}.opps input[data-o$=".accion"],.opps input[data-o$=".bloqueo"]{min-width:200px}
+.opps input[data-cn$=".accion"],.opps input[data-cn$=".resultado"],.opps input[data-cp$=".explicacion"]{min-width:240px}
+.opps td{vertical-align:top}
+.delta{font-size:13px;color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.actions .sp{flex:1}
+button.primary,button.secondary,button.ghost{font:700 15px var(--body);border-radius:8px;padding:10px 16px;cursor:pointer}
+button.primary{background:var(--brand);color:var(--brand-ink);border:0}
+button.secondary{background:var(--surface);color:var(--brand);border:2px solid var(--brand)}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line);font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+.why{font-size:13px;color:var(--muted)}
+details.sec{border:1px dashed var(--line);border-radius:10px;padding:10px 14px}
+details.sec summary{cursor:pointer;font:700 16px var(--display)}
+.ro dl{display:grid;grid-template-columns:minmax(160px,240px) 1fr;gap:6px 14px;margin:0}
+.ro dt{color:var(--muted);font-weight:600;font-size:14px} .ro dd{margin:0;white-space:pre-wrap}
+.modal-bg{position:fixed;inset:0;background:rgb(10 20 15/.55);display:grid;place-items:center;padding:16px;z-index:50}
+.modal{background:var(--surface);border-radius:14px;max-width:520px;width:100%;padding:20px;display:grid;gap:14px;box-shadow:0 10px 40px rgb(0 0 0/.25)}
+.modal h2{font-size:20px}
+.check{display:flex;gap:10px;align-items:flex-start;font-weight:600}
+.check input{width:auto;margin-top:4px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:60}
+.pend{background:var(--warn-bg);color:var(--warn);font-size:12px;font-weight:700;border-radius:5px;padding:1px 6px;margin-left:6px}
+.shared{background:var(--info-bg);color:var(--info);font-size:12px;font-weight:700;border-radius:5px;padding:1px 6px;margin-left:6px}
+@media (max-width:640px){.ro dl{grid-template-columns:1fr}.meta{font-size:13px}}
+</style>
+</head>
+<body>
+<header class="hd"><div class="in">
+  <div class="brand">Mercado Cheque<small>Ficha de gestión semanal · Atención al Cliente</small></div>
+  <div class="meta" id="meta"></div>
+</div></header>
+
+<div class="wrap">
+  <div id="banners"></div>
+
+  <!-- PRIMER INGRESO -->
+  <section class="panel" id="v-setup" hidden>
+    <h2>Configurar tu ficha</h2>
+    <p class="hint">Se completa una sola vez. Los datos quedan guardados en este navegador y no se envían a ningún lado.</p>
+    <div class="grid2">
+      <label class="f">Nombre y apellido<input id="s-nombre" autocomplete="name"></label>
+      <label class="f">Rol<input value="Ejecutivo de Atención al Cliente" readonly></label>
+      <label class="f">Jueves de la próxima reunión<input id="s-fecha" type="date"></label>
+    </div>
+    <p class="why" id="s-err"></p>
+    <div class="actions"><button class="primary" id="s-ok">Crear mi ficha</button><span class="sp"></span><label class="ghost" style="cursor:pointer;padding:9px 14px;border:1px solid var(--line);border-radius:8px;font-weight:600">Restaurar desde respaldo<input type="file" accept=".json,application/json" id="s-import" hidden></label></div>
+  </section>
+
+  <div class="tabs" role="tablist" id="tabs" hidden>
+    <button role="tab" id="t-actual" aria-selected="true">Semana actual</button>
+    <button role="tab" id="t-anterior" aria-selected="false">Semana anterior</button>
+    <button role="tab" id="t-resp" aria-selected="false">Respaldo y ayuda</button>
+  </div>
+
+  <!-- SEMANA ACTUAL -->
+  <div id="v-actual" class="stack" hidden></div>
+
+  <!-- SEMANA ANTERIOR -->
+  <section class="panel ro" id="v-anterior" hidden></section>
+
+  <!-- RESPALDO -->
+  <section class="panel" id="v-resp" hidden>
+    <h2>Respaldo de tu ficha</h2>
+    <p class="hint">Tu ficha se guarda solamente en este navegador de esta computadora. Si borrás los datos de navegación, usás otro navegador, otra computadora o modo incógnito, no la vas a ver. El respaldo es un archivo que restaura tus dos semanas en cualquier equipo.</p>
+    <div class="actions">
+      <button class="primary" id="b-backup">Descargar respaldo</button>
+      <label class="ghost" style="cursor:pointer;padding:9px 14px;border:1px solid var(--line);border-radius:8px;font-weight:600">Restaurar desde respaldo<input type="file" accept=".json,application/json" id="r-import" hidden></label>
+      <span class="why" id="r-info"></span>
+    </div>
+    <h3>Cómo usar la ficha</h3>
+    <ol class="hint" style="margin:0;padding-left:20px;display:grid;gap:4px">
+      <li>Completá la semana actual. Se guarda sola mientras escribís.</li>
+      <li>El jueves, tocá <b>Descargar PDF</b> y mandale el archivo a Gerencia Comercial.</li>
+      <li>Si cambiás algo después de descargar, tenés que descargar el PDF de nuevo.</li>
+      <li>Tocá <b>Cerrar semana</b>: la semana pasa a «Semana anterior» y se prepara la siguiente.</li>
+      <li>Descargá un respaldo al menos una vez por semana.</li>
+    </ol>
+    <h3>Zona de riesgo</h3>
+    <div class="actions"><button class="ghost" id="b-reset">Borrar mi ficha de este navegador</button></div>
+  </section>
+</div>
+<div id="modal-root"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ================= CONFIGURACIÓN (la actualiza Gerencia) =================
+   OBJETIVOS por mes ("AAAA-MM") → por ejecutivo (nombre tal como lo escribió en su ficha)
+   → por indicador. Ejemplo de formato (NO son datos reales):
+   "2026-11": { "Nombre Apellido": { carpetas_completadas: 20, volumen: 150000000 } }
+*/
+const OBJETIVOS = {
+  "2026-10": {
+    cliente: { solicitudes: 100, carpetas_completadas: 40, volumen: 1600 },
+    partner: { solicitudes_canal: 100, carpetas_canal: 40, volumen_canal: 1600 }
+  }
+};
+// Volumen: siempre en MILLONES de pesos (1600 = $ 1.600 M).
+// Además del objetivo por rol, se puede cargar uno por persona: "2026-11": { cliente: {...}, "Nombre Apellido": { carpetas_completadas: 45 } }
+const APP_VERSION = "1.0";
+
+/* ================= DEFINICIÓN DE ROLES ================= */
+// t: "mes" = producción acumulada del mes (día 1 al jueves de corte) · "stock" = foto del estado actual
+const ROLES = {
+  cliente: {
+    nombre: "Ejecutivo de Atención al Cliente",
+    principal: "carpetas_completadas",
+    ind: [
+      {id:"solicitudes", n:"Solicitudes de financiamiento", d:"Publicadas en el mes", t:"mes", obj:true},
+      {id:"clientes_solicitudes", n:"Clientes con solicitudes", d:"Clientes distintos en el mes", t:"mes"},
+      {id:"oportunidades", n:"Oportunidades comerciales", d:"Generadas en el mes", t:"mes"},
+      {id:"carpetas_completadas", n:"Carpetas completadas", d:"Pasaron a «completa» en el mes. Una vez por carpeta; una renovación no vuelve a contar.", t:"mes", obj:true},
+      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes", t:"mes"},
+      {id:"volumen", n:"Volumen transaccional (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M"},
+      {id:"carpetas_completas", n:"Carpetas completas", d:"Estado actual", t:"stock"},
+      {id:"carpetas_incompletas", n:"Carpetas incompletas", d:"Estado actual", t:"stock"},
+      {id:"carpetas_revision", n:"Carpetas pendientes de revisión", d:"Estado actual", t:"stock"}
+    ],
+    rev: {
+      autonomia:"¿Qué resolviste solo este mes y qué todavía necesitás consultar?",
+      organizacion:"Agenda, seguimiento de carpetas y uso de Salesforce.",
+      tecnico:"Productos, documentación de riesgo y requisitos de inversores.",
+      negociacion:"Conversaciones con clientes sobre condiciones, tasa y garantías.",
+      seguimiento:"Cumplimiento de próximos pasos con clientes y carpetas."
+    }
+  },
+  partner: {
+    nombre: "Ejecutivo Partner",
+    principal: "altas_partners",
+    nota: "Los clientes publican las solicitudes; acá se mide el desarrollo del canal y la actividad de los clientes vinculados.",
+    ind: [
+      {id:"altas_partners", n:"Altas de Partners", d:"En el mes", t:"mes", obj:true},
+      {id:"partners_con_solicitudes", n:"Partners con clientes que publicaron solicitudes", d:"En el mes", t:"mes"},
+      {id:"solicitudes_canal", n:"Solicitudes publicadas por clientes de Partners", d:"En el mes · atribución al canal, no a la carga", t:"mes", obj:true},
+      {id:"carpetas_canal", n:"Carpetas completadas de clientes de Partners", d:"En el mes", t:"mes", obj:true},
+      {id:"operaciones_canal", n:"Operaciones instrumentadas del canal", d:"En el mes", t:"mes", shared:true},
+      {id:"volumen_canal", n:"Volumen transaccional del canal (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M", shared:true},
+      {id:"partners_totales", n:"Partners totales", d:"Estado actual", t:"stock"},
+      {id:"partners_activos", n:"Partners activos", d:"Estado actual", t:"stock", pend:true},
+      {id:"partners_operativos", n:"Partners operativos", d:"Estado actual", t:"stock", pend:true}
+    ],
+    rev: {
+      autonomia:"¿Qué gestionaste solo con los Partners y qué necesitaste escalar?",
+      organizacion:"Agenda de visitas, seguimiento de altas y de clientes del canal.",
+      tecnico:"Productos, propuesta al Partner y proceso de carpetas.",
+      negociacion:"Acuerdos con Partners y acompañamiento en cierres de sus clientes.",
+      seguimiento:"Activación de Partners nuevos y seguimiento de sus clientes."
+    }
+  },
+  mesa: {
+    nombre: "Mesa de Inversores",
+    principal: "volumen",
+    ind: [
+      {id:"oportunidades_mes", n:"Oportunidades gestionadas en el mes", d:"En el mes", t:"mes", pend:true},
+      {id:"ofertas", n:"Ofertas realizadas / conseguidas", d:"En el mes · precisar definición y origen", t:"mes", pend:true},
+      {id:"inversores_ofertaron", n:"Inversores que presentaron ofertas", d:"En el mes", t:"mes"},
+      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes", t:"mes", shared:true},
+      {id:"volumen", n:"Volumen transaccional (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M", shared:true},
+      {id:"inversores_totales", n:"Inversores totales", d:"Estado actual", t:"stock"},
+      {id:"inversores_operativos", n:"Inversores operativos", d:"Estado actual", t:"stock", pend:true},
+      {id:"oportunidades_activas", n:"Oportunidades activas", d:"Estado actual", t:"stock"}
+    ],
+    extra: {id:"distribucion", n:"Oportunidades por inversor (distribución resumida)", ph:"Ej.: Inversor A: 6 · Inversor B: 4 · resto: 5"},
+    rev: {
+      autonomia:"¿Qué oportunidades resolviste sin intervención de Gerencia?",
+      organizacion:"Orden de la cartera de inversores y del pipeline de oportunidades.",
+      tecnico:"Criterios de riesgo y apetito de cada inversor.",
+      negociacion:"Condiciones conseguidas con inversores y ofertas mejoradas.",
+      seguimiento:"Respuesta a inversores y cierre de oportunidades abiertas."
+    }
+  }
+};
+const REV_LABELS = {autonomia:"Autonomía", organizacion:"Organización", tecnico:"Conocimiento técnico", negociacion:"Negociación", seguimiento:"Seguimiento"};
+const ETAPAS = ["Prospecto","Solicitud publicada","Carpeta en armado","Carpeta completa","En análisis de inversor","Oferta","En instrumentación","Otra"];
+const AREAS = ["Gerencia","Mesa de Inversores","Operaciones","Desarrollo","Otra"];
+const ESTADOS_COMP = ["Cumplido","Parcial","Pendiente"];
+const ROL = "cliente";
+const KEY = "meche_ficha_cliente_v1";
+
+/* ================= UTILIDADES ================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pad = n => String(n).padStart(2,"0");
+const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseISO = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d, 12); };
+const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate()+n); return isoLocal(d); };
+const fmtFecha = s => s ? s.split("-").reverse().join("/") : "";
+const mesDe = s => s.slice(0,7);
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const fmtMes = m => { const [y,mm] = m.split("-"); return `${MESES[Number(mm)-1]} ${y}`; };
+const isThursday = s => parseISO(s).getDay() === 4;
+const nextThursday = () => { const d = new Date(); d.setHours(12); const diff = (4 - d.getDay() + 7) % 7; d.setDate(d.getDate()+diff); return isoLocal(d); };
+const norm = s => String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").trim().toLowerCase();
+const fmtNum = (v, money) => v == null ? "sin dato" : (money ? "$ " : "") + Number(v).toLocaleString("es-AR", {maximumFractionDigits: 2}) + (money === "M" ? " M" : "");
+const pct = (real, obj) => (obj > 0 && real != null) ? Math.round(real / obj * 100) : null;
+const pclass = p => p == null ? "neutral" : p >= 100 ? "ok" : p >= 70 ? "warn" : "bad";
+function hash(str){ let h = 2166136261; for (let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h>>>0).toString(36); }
+function toast(t){ const el=$("toast"); el.textContent=t; el.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>el.hidden=true, 2800); }
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* ================= ESTADO ================= */
+let S = null;          // estado completo
+let tab = "actual";
+let saveTimer = null, unsaved = false;
+
+function nuevaSemana(fecha, rol, previa){
+  const ind = {};
+  ROLES[rol].ind.forEach(k => {
+    if (!previa) ind[k.id] = null;
+    else if (k.t === "stock") ind[k.id] = previa.ind[k.id] ?? null;                 // stock: se mantiene
+    else ind[k.id] = mesDe(previa.fecha) === mesDe(fecha) ? (previa.ind[k.id] ?? null) : 0; // mes: traslado editable o reinicio
+  });
+  const pendientes = previa ? [
+    ...previa.compromisosPrevios.filter(c => c.estado !== "Cumplido").map(c => ({texto:c.texto, fecha:c.fecha, resultado:c.resultado, desde:c.desde, estado:"", explicacion:""})),
+    ...previa.compromisosNuevos.filter(c => c.accion.trim()).map(c => ({texto:c.accion, fecha:c.fecha, resultado:c.resultado, desde:previa.fecha, estado:"", explicacion:""}))
+  ] : [];
+  return {
+    fecha, ind,
+    extra: previa ? (previa.extra || "") : "",
+    oportunidades: previa ? clone(previa.oportunidades) : Array.from({length:5}, () => ({nombre:"",monto:null,etapa:"",bloqueo:"",accion:"",responsable:"",fecha:""})),
+    balance: {logro:"", accionLogro:"", noAvanzo:"", causa:"", distinto:"", habilidad:""},
+    compromisosPrevios: pendientes,
+    compromisosNuevos: Array.from({length:3}, () => ({accion:"",fecha:"",resultado:""})),
+    apoyo: Array.from({length:3}, () => ({area:"",detalle:""})),
+    revision: {autonomia:"",organizacion:"",tecnico:"",negociacion:"",seguimiento:""},
+    editado: new Date().toISOString()
+  };
+}
+function contenidoHash(sem){ const c = clone(sem); delete c.editado; return hash(JSON.stringify(c)); }
+
+function load(){
+  try { const raw = localStorage.getItem(KEY); if (!raw) return null; const s = JSON.parse(raw); return validar(s) ? s : null; }
+  catch(e){ return null; }
+}
+function validar(s){
+  return s && s.app === "meche-ficha" && s.perfil && s.perfil.rol === ROL && s.actual && s.actual.fecha && s.actual.ind && Array.isArray(s.actual.compromisosNuevos);
+}
+function persist(){
+  try {
+    S.actual.editado = new Date().toISOString();
+    const txt = JSON.stringify(S);
+    localStorage.setItem(KEY, txt);
+    if (localStorage.getItem(KEY) !== txt) throw new Error("verify");
+    unsaved = false; renderStatus(); return true;
+  } catch(e){
+    banner("bad", "No se pudo guardar en este navegador (puede estar en modo incógnito o sin espacio). Descargá un respaldo y avisale a Gerencia.");
+    return false;
+  }
+}
+function scheduleSave(){ unsaved = true; renderStatus(); clearTimeout(saveTimer); saveTimer = setTimeout(persist, 600); }
+window.addEventListener("beforeunload", e => { if (unsaved){ persist(); } });
+
+/* ================= OBJETIVOS ================= */
+function objetivos(sem){
+  const m = OBJETIVOS[mesDe(sem.fecha)] || {};
+  const k = Object.keys(m).find(n => !ROLES[n] && norm(n) === norm(S.perfil.nombre));
+  return Object.assign({}, m[S.perfil.rol] || {}, k ? m[k] : {});
+}
+
+/* ================= CABECERA Y ESTADO ================= */
+function renderMeta(){
+  if (!S){ $("meta").innerHTML = ""; return; }
+  const r = ROLES[S.perfil.rol], sem = S.actual, ob = objetivos(sem);
+  const CORTO = {solicitudes:"Solicitudes", solicitudes_canal:"Solicitudes", carpetas_completadas:"Carpetas", carpetas_canal:"Carpetas", volumen:"Volumen", volumen_canal:"Volumen", altas_partners:"Altas de Partners"};
+  const defs = r.ind.filter(k => k.obj && ob[k.id] != null);
+  const objTxt = defs.length ? defs.map(k => `${CORTO[k.id] || k.n} ${fmtNum(ob[k.id], k.money)}`).join(" · ") : "Objetivos sin cargar";
+  $("meta").innerHTML = `
+    <div><b>Ejecutivo</b>${esc(S.perfil.nombre)}</div>
+    <div><b>Rol</b>${esc(r.nombre)}</div>
+    <div><b>Jueves de corte</b>${fmtFecha(sem.fecha)}</div>
+    <div><b>Mes de gestión</b>${fmtMes(mesDe(sem.fecha))}</div>
+    <div><b>Objetivos del mes</b>${esc(objTxt)}</div>`;
+}
+function pdfVigente(){ return S.pdf && S.pdf.fecha === S.actual.fecha && S.pdf.hash === contenidoHash(S.actual); }
+function faltantes(){
+  const r = ROLES[S.perfil.rol], a = S.actual, f = [];
+  const sinDato = r.ind.filter(k => a.ind[k.id] == null).length;
+  if (sinDato) f.push(`${sinDato} indicador${sinDato>1?"es":""} sin dato`);
+  if (!a.balance.logro.trim()) f.push("logro de la semana");
+  if (!a.compromisosNuevos.some(c => c.accion.trim())) f.push("al menos un compromiso nuevo");
+  const sinEstado = a.compromisosPrevios.filter(c => !c.estado).length;
+  if (sinEstado) f.push(`estado de ${sinEstado} compromiso${sinEstado>1?"s":""} anterior${sinEstado>1?"es":""}`);
+  return f;
+}
+function renderStatus(){
+  const el = $("status"); if (!el || !S) return;
+  const f = faltantes();
+  const save = unsaved ? `<span class="pill warn">Guardando…</span>` : `<span class="pill ok">Guardado en este navegador</span>`;
+  let pdf;
+  if (pdfVigente()) pdf = `<span class="pill ok">PDF descargado · versión ${S.pdf.version} · ${new Date(S.pdf.at).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}</span>`;
+  else if (S.pdf && S.pdf.fecha === S.actual.fecha) pdf = `<span class="pill bad">PDF actualizado pendiente de descargar</span>`;
+  else pdf = `<span class="pill neutral">PDF sin descargar</span>`;
+  const pend = f.length ? `<span class="pill warn" title="${esc(f.join(" · "))}">Falta: ${esc(f.join(" · "))}</span>` : `<span class="pill ok">Ficha completa</span>`;
+  el.innerHTML = save + pdf + pend;
+  const cb = $("b-cerrar"), why = $("why-cerrar");
+  if (cb){ cb.disabled = !pdfVigente(); why.textContent = pdfVigente() ? "" : "Para cerrar la semana primero descargá el PDF de la versión actual."; }
+  // recordatorio de respaldo
+  const dias = (Date.now() - new Date(S.respaldo || S.creado || Date.now()).getTime())/864e5;
+  $("r-info").textContent = S.respaldo ? `Último respaldo: ${new Date(S.respaldo).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}` : "Todavía no descargaste ningún respaldo.";
+  const rb = $("banner-resp");
+  if (rb) rb.hidden = dias < 7;
+}
+function banner(kind, txt){ $("banners").insertAdjacentHTML("beforeend", `<div class="banner ${kind}">${esc(txt)}</div>`); }
+
+/* ================= SEMANA ACTUAL (edición) ================= */
+function renderActual(){
+  const r = ROLES[S.perfil.rol], a = S.actual, ant = S.anterior, ob = objetivos(a);
+  const mismoMes = ant && mesDe(ant.fecha) === mesDe(a.fecha);
+  const fila = k => {
+    const v = a.ind[k.id], o = k.obj ? ob[k.id] : null, p = k.obj ? pct(v, o) : null;
+    let delta = "–";
+    if (ant && ant.ind[k.id] != null && v != null && (k.t === "stock" || mismoMes)){
+      const d = v - ant.ind[k.id]; delta = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
+    }
+    return `<tr>
+      <td class="name">${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}${k.shared?'<span class="shared">Resultado compartido</span>':''}<small>${esc(k.d)}</small></td>
+      ${k.t==="mes" ? `<td class="n">${k.obj ? (o!=null ? fmtNum(o,k.money) : '<span class="why">sin cargar</span>') : '<span class="why">—</span>'}</td>` : ""}
+      <td class="n"><input type="number" min="0" step="any" inputmode="decimal" data-ind="${k.id}" value="${v ?? ""}" placeholder="sin dato" aria-label="${esc(k.n)}"></td>
+      ${k.t==="mes" ? `<td class="n" data-pct="${k.id}">${p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"}</td>` : ""}
+      <td class="n delta" data-delta="${k.id}">${delta}</td></tr>`;
+  };
+  const mes = r.ind.filter(k => k.t === "mes"), stock = r.ind.filter(k => k.t === "stock");
+  const opps = a.oportunidades.map((o,i) => `<tr>
+      <td><input data-o="${i}.nombre" value="${esc(o.nombre)}" placeholder="Empresa o ID"></td>
+      <td><input data-o="${i}.monto" type="number" min="0" step="any" value="${o.monto ?? ""}" placeholder="$"></td>
+      <td><select data-o="${i}.etapa"><option value=""></option>${ETAPAS.map(e=>`<option ${o.etapa===e?"selected":""}>${e}</option>`).join("")}</select></td>
+      <td><input data-o="${i}.bloqueo" value="${esc(o.bloqueo)}"></td>
+      <td><input data-o="${i}.accion" value="${esc(o.accion)}"></td>
+      <td><input data-o="${i}.responsable" value="${esc(o.responsable)}"></td>
+      <td><input data-o="${i}.fecha" type="date" value="${esc(o.fecha)}"></td></tr>`).join("");
+  const prev = a.compromisosPrevios.length ? a.compromisosPrevios.map((c,i) => `<tr>
+      <td>${esc(c.texto)}<small class="why" style="display:block">Asumido el ${fmtFecha(c.desde)}${c.resultado?` · Resultado esperado: ${esc(c.resultado)}`:""}</small></td>
+      <td class="n">${fmtFecha(c.fecha) || "–"}</td>
+      <td><select data-cp="${i}.estado"><option value="">Elegí…</option>${ESTADOS_COMP.map(e=>`<option ${c.estado===e?"selected":""}>${e}</option>`).join("")}</select></td>
+      <td><input data-cp="${i}.explicacion" value="${esc(c.explicacion)}" placeholder="Explicación breve"></td></tr>`).join("")
+    : `<tr><td colspan="4" class="why">No hay compromisos de la semana anterior. Se cargan solos cuando cerrás una semana.</td></tr>`;
+  const nuevos = a.compromisosNuevos.map((c,i) => `<tr>
+      <td><input data-cn="${i}.accion" value="${esc(c.accion)}" placeholder="Acción específica"></td>
+      <td><input data-cn="${i}.fecha" type="date" value="${esc(c.fecha)}"></td>
+      <td><input data-cn="${i}.resultado" value="${esc(c.resultado)}" placeholder="Resultado esperado"></td></tr>`).join("");
+  const apoyo = a.apoyo.map((c,i) => `<tr>
+      <td style="width:200px"><select data-ap="${i}.area"><option value=""></option>${AREAS.map(e=>`<option ${c.area===e?"selected":""}>${e}</option>`).join("")}</select></td>
+      <td><input data-ap="${i}.detalle" value="${esc(c.detalle)}" placeholder="Qué necesitás y para cuándo"></td></tr>`).join("");
+  const B = a.balance;
+  const revFilled = Object.values(a.revision).some(v => v.trim());
+
+  $("v-actual").innerHTML = `
+  <section class="panel">
+    <div class="actions">
+      <label class="f" style="max-width:220px">Jueves de corte<input type="date" id="f-fecha" value="${a.fecha}"></label>
+      <div class="statusbar" id="status" style="flex:1"></div>
+    </div>
+    ${r.nota ? `<p class="hint">${esc(r.nota)}</p>` : ""}
+  </section>
+
+  <section class="panel">
+    <h2><span class="tag">A</span>Indicadores</h2>
+    <h3>Producción del mes · acumulado del 1/${mesDe(a.fecha).slice(5)} al ${fmtFecha(a.fecha)}</h3>
+    <p class="hint">Cargá el acumulado del mes al jueves de corte (no lo de la semana sola). Al cambiar de semana se traslada como punto de partida; al cambiar de mes vuelve a 0.</p>
+    <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Acumulado</th><th class="n">Cumpl.</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${mes.map(fila).join("")}</tbody></table></div>
+    <h3>Estado actual · foto al ${fmtFecha(a.fecha)}</h3>
+    <div class="scroll"><table class="ind"><thead><tr><th>Indicador</th><th class="n">Cantidad hoy</th><th class="n">vs. sem. ant.</th></tr></thead><tbody>${stock.map(fila).join("")}</tbody></table></div>
+    ${r.extra ? `<label class="f">${esc(r.extra.n)}<textarea data-x="extra" placeholder="${esc(r.extra.ph)}">${esc(a.extra)}</textarea></label>` : ""}
+  </section>
+
+  <section class="panel">
+    <h2><span class="tag">B</span>Oportunidades prioritarias</h2>
+    <p class="hint">Hasta 5 casos relevantes, no toda la cartera. Usá nombre de la empresa o un ID; no cargues CUIT ni datos personales.</p>
+    <div class="scroll"><table class="opps"><thead><tr><th>Empresa / ID</th><th>Monto ($)</th><th>Etapa</th><th>Bloqueo</th><th>Próxima acción</th><th>Responsable</th><th>Fecha</th></tr></thead><tbody>${opps}</tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="tag">C</span>Balance de la semana</h2>
+    <div class="grid2">
+      <label class="f">Principal logro de la semana<textarea data-b="logro">${esc(B.logro)}</textarea></label>
+      <label class="f">Acción concreta que lo produjo<textarea data-b="accionLogro">${esc(B.accionLogro)}</textarea></label>
+      <label class="f">Oportunidad que no avanzó<textarea data-b="noAvanzo">${esc(B.noAvanzo)}</textarea></label>
+      <label class="f">Causa<textarea data-b="causa">${esc(B.causa)}</textarea></label>
+      <label class="f">Qué podrías haber hecho distinto<textarea data-b="distinto">${esc(B.distinto)}</textarea></label>
+      <label class="f">Habilidad o conocimiento a desarrollar<textarea data-b="habilidad">${esc(B.habilidad)}</textarea></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="tag">D</span>Compromisos anteriores</h2>
+    <div class="scroll"><table class="opps"><thead><tr><th>Compromiso</th><th class="n">Fecha</th><th>Estado</th><th>Explicación</th></tr></thead><tbody>${prev}</tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="tag">E</span>Compromisos nuevos</h2>
+    <p class="hint">Máximo 3, concretos y con fecha.</p>
+    <div class="scroll"><table class="opps"><thead><tr><th>Acción</th><th>Fecha</th><th>Resultado esperado</th></tr></thead><tbody>${nuevos}</tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <h2><span class="tag">F</span>Apoyo requerido</h2>
+    <div class="scroll"><table class="opps"><thead><tr><th>Área</th><th>Detalle</th></tr></thead><tbody>${apoyo}</tbody></table></div>
+  </section>
+
+  <details class="sec" ${revFilled?"open":""}>
+    <summary>Revisión mensual de desarrollo (opcional)</summary>
+    <p class="hint">Completala una vez al mes. Es una autoevaluación en texto; no lleva puntaje.</p>
+    <div class="grid2">${Object.entries(r.rev).map(([k,h]) => `<label class="f">${REV_LABELS[k]}<textarea data-rv="${k}" placeholder="${esc(h)}">${esc(a.revision[k])}</textarea></label>`).join("")}</div>
+  </details>
+
+  <section class="panel">
+    <div class="actions">
+      <button class="ghost" id="b-guardar">Guardar</button>
+      <button class="secondary" id="b-pdf">Descargar PDF</button>
+      <span class="sp"></span>
+      <span class="why" id="why-cerrar"></span>
+      <button class="primary" id="b-cerrar" disabled>Cerrar semana y preparar la siguiente</button>
+    </div>
+  </section>`;
+  bindActual();
+  renderStatus();
+}
+
+function setPath(obj, path, val){ const ps = path.split("."); let o = obj; for (let i=0;i<ps.length-1;i++) o = o[ps[i]]; o[ps[ps.length-1]] = val; }
+function bindActual(){
+  $("b-guardar").onclick = () => { if (persist()) toast("Guardado"); };
+  $("b-pdf").onclick = descargarPDF;
+  $("b-cerrar").onclick = pedirCierre;
+  $("f-fecha").addEventListener("change", cambiarFecha);
+}
+function onEdit(e){
+  const t = e.target, a = S.actual;
+  if (t.id === "f-fecha") return;
+  const num = v => v === "" ? null : Number(v);
+  if (t.dataset.ind){
+    const v = num(t.value);
+    if (v != null && (isNaN(v) || v < 0)){ t.classList.add("err"); return; }
+    t.classList.remove("err"); a.ind[t.dataset.ind] = v; refreshIndicador(t.dataset.ind);
+  }
+  else if (t.dataset.o){ const [i,f] = t.dataset.o.split("."); if (f==="monto"){ const v=num(t.value); if (v!=null&&(isNaN(v)||v<0)){t.classList.add("err");return;} t.classList.remove("err"); a.oportunidades[i][f]=v; } else a.oportunidades[i][f]=t.value; }
+  else if (t.dataset.b) a.balance[t.dataset.b] = t.value;
+  else if (t.dataset.cp){ const [i,f] = t.dataset.cp.split("."); a.compromisosPrevios[i][f] = t.value; }
+  else if (t.dataset.cn){ const [i,f] = t.dataset.cn.split("."); a.compromisosNuevos[i][f] = t.value; }
+  else if (t.dataset.ap){ const [i,f] = t.dataset.ap.split("."); a.apoyo[i][f] = t.value; }
+  else if (t.dataset.rv) a.revision[t.dataset.rv] = t.value;
+  else if (t.dataset.x) a.extra = t.value;
+  else return;
+  scheduleSave();
+}
+function refreshIndicador(id){
+  const k = ROLES[S.perfil.rol].ind.find(x => x.id === id), a = S.actual, ant = S.anterior, v = a.ind[id];
+  const pc = document.querySelector(`[data-pct="${id}"]`);
+  if (pc){ const p = k.obj ? pct(v, objetivos(a)[id]) : null; pc.innerHTML = p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"; }
+  const dc = document.querySelector(`[data-delta="${id}"]`);
+  if (dc){ const ok = ant && ant.ind[id]!=null && v!=null && (k.t==="stock" || mesDe(ant.fecha)===mesDe(a.fecha)); const d = ok ? v-ant.ind[id] : null; dc.textContent = d==null ? "–" : (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); }
+}
+function cambiarFecha(e){
+  const v = e.target.value, a = S.actual;
+  const err = msg => { toast(msg); e.target.value = a.fecha; };
+  if (!v) return err("Elegí una fecha.");
+  if (!isThursday(v)) return err("La fecha de corte tiene que ser un jueves.");
+  if (S.cerradas.includes(v)) return err("Esa semana ya fue cerrada.");
+  if (S.anterior && v <= S.anterior.fecha) return err("La fecha tiene que ser posterior a la semana anterior.");
+  const esperado = S.anterior ? addDays(S.anterior.fecha, 7) : null;
+  const cambiaMes = mesDe(v) !== mesDe(a.fecha);
+  const aplicar = () => {
+    a.fecha = v;
+    if (cambiaMes && S.anterior){ // recalcular arrastre de producción según el nuevo mes
+      ROLES[S.perfil.rol].ind.filter(k=>k.t==="mes").forEach(k => a.ind[k.id] = mesDe(S.anterior.fecha) === mesDe(v) ? (S.anterior.ind[k.id] ?? null) : 0);
+    }
+    persist(); renderMeta(); renderActual();
+  };
+  if (esperado && v !== esperado){
+    modal(`<h2>¿Saltear semanas?</h2><p>Después del ${fmtFecha(S.anterior.fecha)} correspondería el jueves ${fmtFecha(esperado)}. Elegiste el ${fmtFecha(v)}.${cambiaMes?" Como cambia el mes, la producción mensual se reinicia.":""}</p>`,
+      [{t:"Cancelar", c:"ghost", f:()=>{ e.target.value = a.fecha; }}, {t:"Usar "+fmtFecha(v), c:"primary", f:aplicar}]);
+  } else aplicar();
+}
+
+/* ================= SEMANA ANTERIOR (solo lectura) ================= */
+function renderAnterior(){
+  const el = $("v-anterior");
+  if (!S.anterior){ el.innerHTML = `<h2>Semana anterior</h2><p class="hint">Todavía no cerraste ninguna semana. Cuando cierres la actual, va a aparecer acá en modo consulta.</p>`; return; }
+  const s = S.anterior, r = ROLES[S.perfil.rol], ob = s.objetivosUsados || {};
+  const ind = r.ind.map(k => { const p = k.obj ? pct(s.ind[k.id], ob[k.id]) : null;
+    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${k.t==="mes"?"Acumulado del mes":"Estado actual"}</small></td><td class="n">${k.obj?(ob[k.id]!=null?fmtNum(ob[k.id],k.money):"sin cargar"):"—"}</td><td class="n">${fmtNum(s.ind[k.id],k.money)}</td><td class="n">${p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"}</td></tr>`; }).join("");
+  const opp = s.oportunidades.filter(o=>o.nombre.trim()).map(o=>`<tr><td>${esc(o.nombre)}</td><td class="n">${o.monto!=null?fmtNum(o.monto,true):"–"}</td><td>${esc(o.etapa)}</td><td>${esc(o.bloqueo)}</td><td>${esc(o.accion)}</td><td>${esc(o.responsable)}</td><td>${fmtFecha(o.fecha)}</td></tr>`).join("") || `<tr><td colspan="7" class="why">Sin oportunidades cargadas.</td></tr>`;
+  const B = s.balance;
+  el.innerHTML = `<h2>Semana anterior · jueves ${fmtFecha(s.fecha)} <span class="pill neutral">Solo lectura · cerrada el ${new Date(s.cerradaEn).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}</span></h2>
+    <h3>Indicadores</h3><div class="scroll"><table><thead><tr><th>Indicador</th><th class="n">Objetivo</th><th class="n">Valor</th><th class="n">Cumpl.</th></tr></thead><tbody>${ind}</tbody></table></div>
+    ${r.extra && s.extra ? `<dl><dt>${esc(r.extra.n)}</dt><dd>${esc(s.extra)}</dd></dl>`:""}
+    <h3>Oportunidades prioritarias</h3><div class="scroll"><table><thead><tr><th>Empresa / ID</th><th class="n">Monto</th><th>Etapa</th><th>Bloqueo</th><th>Próxima acción</th><th>Resp.</th><th>Fecha</th></tr></thead><tbody>${opp}</tbody></table></div>
+    <h3>Balance</h3><dl>
+      <dt>Logro</dt><dd>${esc(B.logro)||"–"}</dd><dt>Acción que lo produjo</dt><dd>${esc(B.accionLogro)||"–"}</dd>
+      <dt>No avanzó</dt><dd>${esc(B.noAvanzo)||"–"}</dd><dt>Causa</dt><dd>${esc(B.causa)||"–"}</dd>
+      <dt>Qué haría distinto</dt><dd>${esc(B.distinto)||"–"}</dd><dt>Habilidad a desarrollar</dt><dd>${esc(B.habilidad)||"–"}</dd></dl>
+    <h3>Compromisos anteriores</h3><dl>${s.compromisosPrevios.map(c=>`<dt>${esc(c.estado||"Sin estado")}</dt><dd>${esc(c.texto)}${c.explicacion?` — ${esc(c.explicacion)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
+    <h3>Compromisos asumidos</h3><dl>${s.compromisosNuevos.filter(c=>c.accion.trim()).map(c=>`<dt>${fmtFecha(c.fecha)||"Sin fecha"}</dt><dd>${esc(c.accion)}${c.resultado?` → ${esc(c.resultado)}`:""}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>
+    <h3>Apoyo requerido</h3><dl>${s.apoyo.filter(x=>x.detalle.trim()).map(x=>`<dt>${esc(x.area||"–")}</dt><dd>${esc(x.detalle)}</dd>`).join("")||"<dd class='why'>Ninguno</dd>"}</dl>`;
+}
+
+/* ================= PDF ================= */
+function construirPDF(sem, version){
+  if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("La librería de PDF no cargó. Revisá la conexión a internet y recargá la página.");
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:"mm", format:"a4"});
+  if (typeof doc.autoTable !== "function") throw new Error("La librería de tablas del PDF no cargó. Recargá la página.");
+  const r = ROLES[S.perfil.rol], ob = objetivos(sem), ant = S.anterior;
+  const mismoMes = ant && mesDe(ant.fecha) === mesDe(sem.fecha);
+  const W = 210, M = 14, verde = [0,114,65];
+  const exportado = new Date();
+  const pie = () => {
+    const n = doc.getNumberOfPages();
+    for (let i=1;i<=n;i++){ doc.setPage(i); doc.setFontSize(8); doc.setTextColor(110);
+      doc.text(`MeChe · Ficha de gestión · ${S.perfil.nombre} · Jueves ${fmtFecha(sem.fecha)} · Versión ${version} · Exportado ${exportado.toLocaleString("es-AR")}`, M, 290);
+      doc.text(`Página ${i} de ${n}`, W-M, 290, {align:"right"}); }
+  };
+  doc.setFillColor(...verde); doc.rect(0,0,W,30,"F");
+  doc.setTextColor(255); doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.text("Mercado Cheque · Ficha de gestión semanal", M, 13);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10);
+  doc.text(`${S.perfil.nombre} · ${r.nombre}`, M, 20);
+  doc.text(`Jueves de corte: ${fmtFecha(sem.fecha)} · Mes de gestión: ${fmtMes(mesDe(sem.fecha))} · Período: 01/${mesDe(sem.fecha).slice(5)}/${mesDe(sem.fecha).slice(0,4)} al ${fmtFecha(sem.fecha)}`, M, 26);
+  doc.setTextColor(20);
+  let y = 38;
+  const titulo = t => { if (y > 245){ doc.addPage(); y = 18; } doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...verde); doc.text(t, M, y); doc.setTextColor(20); y += 3; };
+  const tabla = (head, body, opts={}) => { doc.autoTable(Object.assign({head:[head], body, startY:y, margin:{left:M,right:M}, styles:{fontSize:9, cellPadding:1.8, overflow:"linebreak", valign:"top"}, headStyles:{fillColor:[233,241,236], textColor:[30,50,40], fontStyle:"bold"}, theme:"grid", rowPageBreak:"avoid"}, opts)); y = doc.lastAutoTable.finalY + 8; };
+  const dlt = k => { if (!(ant && ant.ind[k.id]!=null && sem.ind[k.id]!=null && (k.t==="stock"||mismoMes))) return "–"; const d = sem.ind[k.id]-ant.ind[k.id]; return (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); };
+  const nota = k => (k.pend?" [definición pendiente]":"")+(k.shared?" [resultado compartido]":"");
+
+  titulo("A. Producción del mes (acumulado al jueves de corte)");
+  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const o=k.obj?ob[k.id]:null, p=k.obj?pct(sem.ind[k.id],o):null; return [k.n+nota(k), k.obj?(o!=null?fmtNum(o,k.money):"sin cargar"):"—", fmtNum(sem.ind[k.id],k.money), p!=null?p+"%":"–", dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}}});
+  titulo("A. Estado actual (stock al jueves de corte)");
+  tabla(["Indicador","Cantidad","vs. sem. ant."], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money), dlt(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
+  if (r.extra && sem.extra.trim()){ titulo(r.extra.n); tabla(["Detalle"], [[sem.extra]]); }
+  const opps = sem.oportunidades.filter(o=>o.nombre.trim());
+  titulo("B. Oportunidades prioritarias");
+  tabla(["Empresa / ID","Monto","Etapa","Bloqueo","Próxima acción","Resp.","Fecha"], opps.length ? opps.map(o=>[o.nombre, o.monto!=null?fmtNum(o.monto,true):"–", o.etapa, o.bloqueo, o.accion, o.responsable, fmtFecha(o.fecha)]) : [["Sin oportunidades cargadas","","","","","",""]]);
+  const B = sem.balance;
+  titulo("C. Balance de la semana");
+  tabla(["Tema","Respuesta"], [["Principal logro",B.logro],["Acción que lo produjo",B.accionLogro],["Oportunidad que no avanzó",B.noAvanzo],["Causa",B.causa],["Qué podría haber hecho distinto",B.distinto],["Habilidad a desarrollar",B.habilidad]].map(([a,b])=>[a,b.trim()||"–"]), {columnStyles:{0:{cellWidth:52,fontStyle:"bold"}}});
+  titulo("D. Compromisos anteriores");
+  tabla(["Compromiso","Fecha","Estado","Explicación"], sem.compromisosPrevios.length ? sem.compromisosPrevios.map(c=>[c.texto, fmtFecha(c.fecha)||"–", c.estado||"Sin estado", c.explicacion||"–"]) : [["No había compromisos anteriores","","",""]]);
+  const nv = sem.compromisosNuevos.filter(c=>c.accion.trim());
+  titulo("E. Compromisos nuevos");
+  tabla(["Acción","Fecha","Resultado esperado"], nv.length ? nv.map(c=>[c.accion, fmtFecha(c.fecha)||"–", c.resultado||"–"]) : [["Sin compromisos nuevos","",""]]);
+  const ap = sem.apoyo.filter(x=>x.detalle.trim());
+  titulo("F. Apoyo requerido");
+  tabla(["Área","Detalle"], ap.length ? ap.map(x=>[x.area||"–", x.detalle]) : [["–","Sin pedidos de apoyo"]], {columnStyles:{0:{cellWidth:45}}});
+  const rv = Object.entries(sem.revision).filter(([,v])=>v.trim());
+  if (rv.length){ titulo("Revisión mensual de desarrollo (autoevaluación)"); tabla(["Competencia","Autoevaluación"], rv.map(([k,v])=>[REV_LABELS[k], v]), {columnStyles:{0:{cellWidth:45,fontStyle:"bold"}}}); }
+  if (y > 270){ doc.addPage(); y = 18; }
+  doc.setFontSize(8.5); doc.setTextColor(90);
+  doc.text("Documento preparado por el ejecutivo. No incluye evaluación ni aprobación de Gerencia Comercial.", M, y);
+  pie();
+  return doc;
+}
+function nombreArchivo(sem){ const n = S.perfil.nombre.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,""); return `MeChe_GestionSemanal_${n}_${sem.fecha}.pdf`; }
+function descargarPDF(){
+  persist();
+  const h = contenidoHash(S.actual);
+  const version = (S.pdf && S.pdf.fecha === S.actual.fecha) ? (S.pdf.hash === h ? S.pdf.version : S.pdf.version + 1) : 1;
+  let doc;
+  try { doc = construirPDF(S.actual, version); }
+  catch(e){ modal(`<h2>No se pudo generar el PDF</h2><p>${esc(e.message)}</p><p class="hint">El cierre de semana sigue bloqueado hasta que el PDF se descargue.</p>`, [{t:"Entendido", c:"primary"}]); return; }
+  try {
+    doc.save(nombreArchivo(S.actual));
+  } catch(e){ modal(`<h2>El navegador bloqueó la descarga</h2><p>Revisá que el navegador permita descargas para esta página y probá de nuevo.</p>`, [{t:"Entendido", c:"primary"}]); return; }
+  S.pdf = {fecha:S.actual.fecha, hash:h, version, at:new Date().toISOString()};
+  persist();
+  toast("Descarga del PDF iniciada. Revisá tu carpeta de descargas.");
+}
+
+/* ================= CIERRE ================= */
+function pedirCierre(){
+  if (!pdfVigente()) return;
+  if (S.cerradas.includes(S.actual.fecha)) return modal(`<h2>Semana ya cerrada</h2><p>El jueves ${fmtFecha(S.actual.fecha)} ya fue cerrado antes.</p>`, [{t:"Entendido",c:"primary"}]);
+  const f = faltantes();
+  const prox = addDays(S.actual.fecha, 7), cambiaMes = mesDe(prox) !== mesDe(S.actual.fecha);
+  modal(`<h2>Cerrar semana del ${fmtFecha(S.actual.fecha)}</h2>
+    ${f.length ? `<p class="banner warn">Quedan datos sin completar: ${esc(f.join(" · "))}. Podés cerrar igual; van a figurar así en el PDF.</p>` : ""}
+    <p>La semana actual pasa a «Semana anterior» (solo lectura)${S.anterior ? ` y <b>se reemplaza la semana del ${fmtFecha(S.anterior.fecha)}</b>, que ya cerraste y descargaste en su momento` : ""}. Se prepara el jueves ${fmtFecha(prox)}${cambiaMes ? `, que empieza un mes nuevo: la producción mensual vuelve a 0 y el stock se mantiene` : ", con los acumulados del mes como punto de partida"}.</p>
+    <p class="hint">La ficha no puede comprobar que el archivo se haya guardado ni que lo hayas enviado.</p>
+    <label class="check"><input type="checkbox" id="m-ok"> Ya envié el PDF a Gerencia Comercial.</label>`,
+    [{t:"Cancelar", c:"ghost"}, {t:"Cerrar semana", c:"primary", id:"m-confirm", disabled:true, f:cerrar}],
+    () => { $("m-ok").onchange = e => $("m-confirm").disabled = !e.target.checked; });
+}
+function cerrar(){
+  if (!pdfVigente()) return;
+  const backup = JSON.stringify(S);
+  try {
+    const cerrada = clone(S.actual);
+    cerrada.cerradaEn = new Date().toISOString();
+    cerrada.objetivosUsados = objetivos(S.actual);
+    cerrada.pdfVersion = S.pdf.version;
+    const prox = addDays(cerrada.fecha, 7);
+    const nueva = nuevaSemana(prox, S.perfil.rol, cerrada);
+    S.cerradas = [...S.cerradas, cerrada.fecha].slice(-60);
+    S.anterior = cerrada;
+    S.actual = nueva;
+    S.pdf = null;
+    if (!persist()) throw new Error("persist");
+  } catch(e){
+    S = JSON.parse(backup); try{ localStorage.setItem(KEY, backup);}catch(_){}
+    modal(`<h2>No se pudo cerrar la semana</h2><p>Hubo un error al guardar en este navegador. La semana sigue abierta y no se perdió nada. Descargá un respaldo y avisale a Gerencia.</p>`, [{t:"Entendido",c:"primary"}]);
+    return;
+  }
+  renderAll(); toast("Semana cerrada. Ya podés cargar el jueves " + fmtFecha(S.actual.fecha));
+}
+
+/* ================= RESPALDO ================= */
+function descargarRespaldo(){
+  persist();
+  const blob = new Blob([JSON.stringify(S, null, 2)], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  const n = S.perfil.nombre.normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^A-Za-z0-9]+/g,"");
+  a.download = `MeChe_Respaldo_${n}_${isoLocal(new Date())}.json`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  S.respaldo = new Date().toISOString(); persist(); toast("Descarga del respaldo iniciada");
+}
+function importar(file){
+  if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    let data; try { data = JSON.parse(rd.result); } catch(e){ data = null; }
+    if (!validar(data)) return modal(`<h2>Archivo no válido</h2><p>Ese archivo no es un respaldo de la ficha de ${esc(ROLES[ROL].nombre)}.</p>`, [{t:"Entendido",c:"primary"}]);
+    const txt = `<h2>Restaurar respaldo</h2><p>Respaldo de <b>${esc(data.perfil.nombre)}</b> (${esc(ROLES[data.perfil.rol].nombre)}): semana actual del ${fmtFecha(data.actual.fecha)}${data.anterior?` y semana anterior del ${fmtFecha(data.anterior.fecha)}`:""}.</p>${S?`<p class="banner warn">Reemplaza todo lo que hay guardado en este navegador (semana actual del ${fmtFecha(S.actual.fecha)}).</p>`:""}`;
+    modal(txt, [{t:"Cancelar",c:"ghost"},{t:"Restaurar",c:"primary",f:()=>{ S = data; if (persist()){ renderAll(); toast("Ficha restaurada"); } }}]);
+  };
+  rd.readAsText(file);
+}
+
+/* ================= MODAL ================= */
+function modal(html, buttons, after){
+  const root = $("modal-root");
+  root.innerHTML = `<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true">${html}<div class="actions" style="justify-content:flex-end">${buttons.map((b,i)=>`<button class="${b.c}" data-i="${i}" ${b.id?`id="${b.id}"`:""} ${b.disabled?"disabled":""}>${esc(b.t)}</button>`).join("")}</div></div></div>`;
+  root.querySelectorAll("button[data-i]").forEach(btn => btn.onclick = () => { const b = buttons[btn.dataset.i]; root.innerHTML = ""; b.f && b.f(); });
+  after && after();
+}
+
+/* ================= NAVEGACIÓN ================= */
+function showTab(t){
+  tab = t;
+  ["actual","anterior","resp"].forEach(x => { $("t-"+x).setAttribute("aria-selected", x===t); });
+  $("v-actual").hidden = t !== "actual"; $("v-anterior").hidden = t !== "anterior"; $("v-resp").hidden = t !== "resp";
+  if (t === "anterior") renderAnterior();
+}
+function renderAll(){
+  $("banners").innerHTML = "";
+  if (!S){ $("v-setup").hidden = false; $("tabs").hidden = true; $("v-actual").hidden = true; $("v-anterior").hidden = true; $("v-resp").hidden = true; renderMeta(); return; }
+  $("v-setup").hidden = true; $("tabs").hidden = false;
+  $("banners").insertAdjacentHTML("beforeend", `<div class="banner warn" id="banner-resp" hidden>Hace más de 7 días que no descargás un respaldo de tu ficha. Si se borran los datos del navegador, perdés la ficha. <button class="ghost" style="margin-left:8px;padding:4px 10px" onclick="descargarRespaldo()">Descargar respaldo</button></div>`);
+  renderMeta(); renderActual(); renderAnterior(); showTab(tab);
+}
+
+/* ================= INICIO ================= */
+function setup(){
+  $("s-fecha").value = nextThursday();
+  $("s-ok").onclick = () => {
+    const nombre = $("s-nombre").value.trim(), rol = ROL, fecha = $("s-fecha").value;
+    const err = t => $("s-err").textContent = t;
+    if (nombre.length < 3) return err("Escribí tu nombre y apellido.");
+    if (!rol) return err("Elegí tu rol.");
+    if (!fecha || !isThursday(fecha)) return err("La fecha tiene que ser un jueves.");
+    S = {app:"meche-ficha", appVersion:APP_VERSION, perfil:{nombre, rol}, actual:nuevaSemana(fecha, rol, null), anterior:null, cerradas:[], pdf:null, respaldo:null, creado:new Date().toISOString()};
+    if (persist()) renderAll();
+  };
+  $("s-import").onchange = e => importar(e.target.files[0]);
+}
+$("t-actual").onclick = () => showTab("actual");
+$("t-anterior").onclick = () => showTab("anterior");
+$("t-resp").onclick = () => showTab("resp");
+$("b-backup").onclick = descargarRespaldo;
+$("r-import").onchange = e => { importar(e.target.files[0]); e.target.value = ""; };
+$("b-reset").onclick = () => modal(`<h2>Borrar la ficha de este navegador</h2><p>Se borran la semana actual y la anterior. No se puede deshacer. Si querés conservarlas, descargá antes un respaldo.</p><label class="f">Escribí BORRAR para confirmar<input id="m-txt"></label>`,
+  [{t:"Cancelar",c:"ghost"},{t:"Borrar",c:"primary",id:"m-del",disabled:true,f:()=>{ try{localStorage.removeItem(KEY);}catch(e){} S=null; tab="actual"; renderAll(); }}],
+  () => { $("m-txt").oninput = e => $("m-del").disabled = e.target.value.trim().toUpperCase() !== "BORRAR"; });
+
+setup();
+$("v-actual").addEventListener("input", onEdit);
+$("v-actual").addEventListener("change", onEdit);
+S = load();
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+renderAll();
+try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); } catch(e){ banner("bad","Este navegador no permite guardar datos (por ejemplo, en modo incógnito). Lo que cargues se va a perder al cerrar la pestaña."); }
+</script>
+</body>
+</html>
