@@ -171,14 +171,14 @@ const ROLES = {
     principal: "carpetas_completadas",
     ind: [
       {id:"solicitudes", n:"Solicitudes de financiamiento", d:"Publicadas en el mes", t:"mes", obj:true},
-      {id:"clientes_solicitudes", n:"Clientes con solicitudes", d:"Clientes distintos en el mes", t:"mes"},
-      {id:"oportunidades", n:"Oportunidades comerciales", d:"Generadas en el mes", t:"mes"},
+      {id:"clientes_solicitudes", n:"Clientes con solicitudes", d:"Clientes distintos en el mes", t:"mes", prom:"solicitudesPorCliente"},
+      {id:"oportunidades", n:"Oportunidades nuevas", d:"Ingresadas en el mes", t:"mes", trend:true},
       {id:"carpetas_completadas", n:"Carpetas completadas", d:"Pasaron a «completa» en el mes. Una vez por carpeta; una renovación no vuelve a contar.", t:"mes", obj:true},
-      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes", t:"mes"},
       {id:"volumen", n:"Volumen transaccional (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M"},
-      {id:"carpetas_completas", n:"Carpetas completas", d:"Estado actual", t:"stock"},
-      {id:"carpetas_incompletas", n:"Carpetas incompletas", d:"Estado actual", t:"stock"},
-      {id:"carpetas_revision", n:"Carpetas pendientes de revisión", d:"Estado actual", t:"stock"}
+      {id:"operaciones", n:"Operaciones instrumentadas", d:"En el mes · el promedio es volumen / operaciones", t:"mes", prom:"ticket"},
+      {id:"carpetas_completas", n:"Carpetas completas", d:"Totales", t:"stock"},
+      {id:"carpetas_incompletas", n:"Carpetas incompletas", d:"Totales", t:"stock"},
+      {id:"carpetas_revision", n:"Carpetas pendientes de revisión", d:"Totales", t:"stock"}
     ],
     rev: {
       autonomia:"¿Qué resolviste solo este mes y qué todavía necesitás consultar?",
@@ -197,8 +197,8 @@ const ROLES = {
       {id:"partners_con_solicitudes", n:"Partners con clientes que publicaron solicitudes", d:"En el mes", t:"mes"},
       {id:"solicitudes_canal", n:"Solicitudes publicadas por clientes de Partners", d:"En el mes · atribución al canal, no a la carga", t:"mes", obj:true},
       {id:"carpetas_canal", n:"Carpetas completadas de clientes de Partners", d:"En el mes", t:"mes", obj:true},
-      {id:"operaciones_canal", n:"Operaciones instrumentadas del canal", d:"En el mes", t:"mes", shared:true},
       {id:"volumen_canal", n:"Volumen transaccional del canal (millones de $)", d:"En el mes · cargar en millones: 1.600 = $ 1.600 M", t:"mes", obj:true, money:"M", shared:true},
+      {id:"operaciones_canal", n:"Operaciones instrumentadas del canal", d:"En el mes · el promedio es volumen / operaciones", t:"mes", shared:true, prom:"ticketCanal"},
       {id:"partners_totales", n:"Partners totales", d:"Estado actual", t:"stock"},
       {id:"partners_activos", n:"Partners activos", d:"Estado actual", t:"stock", pend:true},
       {id:"partners_operativos", n:"Partners operativos", d:"Estado actual", t:"stock", pend:true}
@@ -234,6 +234,39 @@ const ROLES = {
     }
   }
 };
+/* Indicadores con promedio en la columna Objetivo y semáforo en Cumpl. */
+const PROMEDIOS = {
+  solicitudesPorCliente: {num:"solicitudes", money:false, dec:1, regla: v => v <= 2.5 ? "ok" : v <= 3.5 ? "warn" : "bad",
+    ayuda:"Solicitudes / clientes. Hasta 2,5 bien · 2,5 a 3,5 regular · más de 3,5 mal"},
+  ticket: {num:"volumen", money:"M", dec:1, regla: v => v > 100 ? "ok" : v >= 50 ? "warn" : "bad",
+    ayuda:"Volumen / operaciones. Más de $100 M bien · $50 a $100 M regular · menos de $50 M mal"},
+  ticketCanal: {num:"volumen_canal", money:"M", dec:1, regla: v => v > 100 ? "ok" : v >= 50 ? "warn" : "bad",
+    ayuda:"Volumen / operaciones. Más de $100 M bien · $50 a $100 M regular · menos de $50 M mal"}
+};
+const SEMAFORO = {ok:{i:"✔", t:"Bien"}, warn:{i:"⚠", t:"Regular"}, bad:{i:"✖", t:"Mal"}};
+/* Calcula lo que va en las columnas Objetivo y Cumpl. para un indicador */
+function evalInd(k, sem, ob, ant){
+  const v = sem.ind[k.id];
+  if (k.prom){
+    const P = PROMEDIOS[k.prom], num = sem.ind[P.num];
+    const pr = (num != null && v > 0) ? Math.round(num / v * 10**P.dec) / 10**P.dec : null;
+    if (pr == null) return {obj:"Prom. –", objHtml:`<span title="${P.ayuda}">Prom. –</span>`, cum:"–", cumHtml:"–"};
+    const c = P.regla(pr), sm = SEMAFORO[c];
+    return {obj:"Prom. "+fmtNum(pr,P.money), objHtml:`<span title="${P.ayuda}">Prom. ${fmtNum(pr,P.money)}</span>`, cum:sm.t, cumHtml:`<span class="pill ${c}" title="${P.ayuda}">${sm.i} ${sm.t}</span>`};
+  }
+  if (k.trend){
+    const ok = ant && ant.ind[k.id] != null && v != null && mesDe(ant.fecha) === mesDe(sem.fecha);
+    if (!ok) return {obj:"—", objHtml:'<span class="why">—</span>', cum:"–", cumHtml:"–"};
+    const d = v - ant.ind[k.id];
+    if (d > 0) return {obj:"—", objHtml:'<span class="why">—</span>', cum:`Sube +${fmtNum(d)}`, cumHtml:`<span class="pill ok">↑ ${fmtNum(d)}</span>`};
+    if (d < 0) return {obj:"—", objHtml:'<span class="why">—</span>', cum:`Baja ${fmtNum(d)}`, cumHtml:`<span class="pill bad">↓ ${fmtNum(-d)}</span>`};
+    return {obj:"—", objHtml:'<span class="why">—</span>', cum:"Igual", cumHtml:`<span class="pill neutral">= 0</span>`};
+  }
+  if (!k.obj) return {obj:"—", objHtml:'<span class="why">—</span>', cum:"–", cumHtml:"–"};
+  const o = ob[k.id], p = pct(v, o);
+  return {obj: o!=null ? fmtNum(o,k.money) : "sin cargar", objHtml: o!=null ? fmtNum(o,k.money) : '<span class="why">sin cargar</span>',
+          cum: p!=null ? p+"%" : "–", cumHtml: p!=null ? `<span class="pill ${pclass(p)}">${p}%</span>` : "–"};
+}
 const REV_LABELS = {autonomia:"Autonomía", organizacion:"Organización", tecnico:"Conocimiento técnico", negociacion:"Negociación", seguimiento:"Seguimiento"};
 const ETAPAS = ["Prospecto","Solicitud publicada","Carpeta en armado","Carpeta completa","En análisis de inversor","Oferta","En instrumentación","Otra"];
 const AREAS = ["Gerencia","Mesa de Inversores","Operaciones","Desarrollo","Otra"];
@@ -371,16 +404,16 @@ function renderActual(){
   const r = ROLES[S.perfil.rol], a = S.actual, ant = S.anterior, ob = objetivos(a);
   const mismoMes = ant && mesDe(ant.fecha) === mesDe(a.fecha);
   const fila = k => {
-    const v = a.ind[k.id], o = k.obj ? ob[k.id] : null, p = k.obj ? pct(v, o) : null;
+    const v = a.ind[k.id], E = evalInd(k, a, ob, ant);
     let delta = "–";
     if (ant && ant.ind[k.id] != null && v != null && (k.t === "stock" || mismoMes)){
       const d = v - ant.ind[k.id]; delta = (d > 0 ? "+" : "") + fmtNum(d, k.money).replace("$ -","-$ ");
     }
     return `<tr>
       <td class="name">${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}${k.shared?'<span class="shared">Resultado compartido</span>':''}<small>${esc(k.d)}</small></td>
-      ${k.t==="mes" ? `<td class="n">${k.obj ? (o!=null ? fmtNum(o,k.money) : '<span class="why">sin cargar</span>') : '<span class="why">—</span>'}</td>` : ""}
+      ${k.t==="mes" ? `<td class="n" data-obj="${k.id}">${E.objHtml}</td>` : ""}
       <td class="n"><input type="number" min="0" step="any" inputmode="decimal" data-ind="${k.id}" value="${v ?? ""}" placeholder="sin dato" aria-label="${esc(k.n)}"></td>
-      ${k.t==="mes" ? `<td class="n" data-pct="${k.id}">${p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"}</td>` : ""}
+      ${k.t==="mes" ? `<td class="n" data-pct="${k.id}">${E.cumHtml}</td>` : ""}
       <td class="n delta" data-delta="${k.id}">${delta}</td></tr>`;
   };
   const mes = r.ind.filter(k => k.t === "mes"), stock = r.ind.filter(k => k.t === "stock");
@@ -494,7 +527,7 @@ function onEdit(e){
   if (t.dataset.ind){
     const v = num(t.value);
     if (v != null && (isNaN(v) || v < 0)){ t.classList.add("err"); return; }
-    t.classList.remove("err"); a.ind[t.dataset.ind] = v; refreshIndicador(t.dataset.ind);
+    t.classList.remove("err"); a.ind[t.dataset.ind] = v; ROLES[S.perfil.rol].ind.forEach(x => refreshIndicador(x.id));
   }
   else if (t.dataset.o){ const [i,f] = t.dataset.o.split("."); if (f==="monto"){ const v=num(t.value); if (v!=null&&(isNaN(v)||v<0)){t.classList.add("err");return;} t.classList.remove("err"); a.oportunidades[i][f]=v; } else a.oportunidades[i][f]=t.value; }
   else if (t.dataset.b) a.balance[t.dataset.b] = t.value;
@@ -508,8 +541,9 @@ function onEdit(e){
 }
 function refreshIndicador(id){
   const k = ROLES[S.perfil.rol].ind.find(x => x.id === id), a = S.actual, ant = S.anterior, v = a.ind[id];
-  const pc = document.querySelector(`[data-pct="${id}"]`);
-  if (pc){ const p = k.obj ? pct(v, objetivos(a)[id]) : null; pc.innerHTML = p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"; }
+  const E = evalInd(k, a, objetivos(a), ant);
+  const pc = document.querySelector(`[data-pct="${id}"]`); if (pc) pc.innerHTML = E.cumHtml;
+  const oc = document.querySelector(`[data-obj="${id}"]`); if (oc) oc.innerHTML = E.objHtml;
   const dc = document.querySelector(`[data-delta="${id}"]`);
   if (dc){ const ok = ant && ant.ind[id]!=null && v!=null && (k.t==="stock" || mesDe(ant.fecha)===mesDe(a.fecha)); const d = ok ? v-ant.ind[id] : null; dc.textContent = d==null ? "–" : (d>0?"+":"")+fmtNum(d,k.money).replace("$ -","-$ "); }
 }
@@ -540,8 +574,8 @@ function renderAnterior(){
   const el = $("v-anterior");
   if (!S.anterior){ el.innerHTML = `<h2>Semana anterior</h2><p class="hint">Todavía no cerraste ninguna semana. Cuando cierres la actual, va a aparecer acá en modo consulta.</p>`; return; }
   const s = S.anterior, r = ROLES[S.perfil.rol], ob = s.objetivosUsados || {};
-  const ind = r.ind.map(k => { const p = k.obj ? pct(s.ind[k.id], ob[k.id]) : null;
-    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${k.t==="mes"?"Acumulado del mes":"Estado actual"}</small></td><td class="n">${k.obj?(ob[k.id]!=null?fmtNum(ob[k.id],k.money):"sin cargar"):"—"}</td><td class="n">${fmtNum(s.ind[k.id],k.money)}</td><td class="n">${p!=null?`<span class="pill ${pclass(p)}">${p}%</span>`:"–"}</td></tr>`; }).join("");
+  const ind = r.ind.map(k => { const E = evalInd(k, s, ob, null);
+    return `<tr><td>${esc(k.n)}${k.pend?'<span class="pend">Definición pendiente</span>':''}<small class="why" style="display:block">${k.t==="mes"?"Acumulado del mes":"Estado actual"}</small></td><td class="n">${k.t==="mes"?E.objHtml:"—"}</td><td class="n">${fmtNum(s.ind[k.id],k.money)}</td><td class="n">${k.t==="mes"?E.cumHtml:"–"}</td></tr>`; }).join("");
   const opp = s.oportunidades.filter(o=>o.nombre.trim()).map(o=>`<tr><td>${esc(o.nombre)}</td><td class="n">${o.monto!=null?fmtNum(o.monto,true):"–"}</td><td>${esc(o.etapa)}</td><td>${esc(o.bloqueo)}</td><td>${esc(o.accion)}</td><td>${esc(o.responsable)}</td><td>${fmtFecha(o.fecha)}</td></tr>`).join("") || `<tr><td colspan="7" class="why">Sin oportunidades cargadas.</td></tr>`;
   const B = s.balance;
   el.innerHTML = `<h2>Semana anterior · jueves ${fmtFecha(s.fecha)} <span class="pill neutral">Solo lectura · cerrada el ${new Date(s.cerradaEn).toLocaleString("es-AR",{dateStyle:"short",timeStyle:"short"})}</span></h2>
@@ -586,7 +620,8 @@ function construirPDF(sem, version){
   const nota = k => (k.pend?" [definición pendiente]":"")+(k.shared?" [resultado compartido]":"");
 
   titulo("A. Producción del mes (acumulado al jueves de corte)");
-  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const o=k.obj?ob[k.id]:null, p=k.obj?pct(sem.ind[k.id],o):null; return [k.n+nota(k), k.obj?(o!=null?fmtNum(o,k.money):"sin cargar"):"—", fmtNum(sem.ind[k.id],k.money), p!=null?p+"%":"–", dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}}});
+  tabla(["Indicador","Objetivo","Acumulado","Cumpl.","vs. sem. ant."], r.ind.filter(k=>k.t==="mes").map(k=>{ const E = evalInd(k, sem, ob, ant); return [k.n+nota(k), E.obj, fmtNum(sem.ind[k.id],k.money), E.cum, dlt(k)]; }), {columnStyles:{1:{halign:"right"},2:{halign:"right"},3:{halign:"right"},4:{halign:"right"}},
+    didParseCell: d => { if (d.section==="body" && d.column.index===3){ const t=String(d.cell.raw); const c = t==="Bien"||t.startsWith("Sube")?[15,122,61]:t==="Regular"?[143,91,0]:t==="Mal"||t.startsWith("Baja")?[179,38,30]:null; if (c){ d.cell.styles.textColor=c; d.cell.styles.fontStyle="bold"; } } }});
   titulo("A. Estado actual (stock al jueves de corte)");
   tabla(["Indicador","Cantidad","vs. sem. ant."], r.ind.filter(k=>k.t==="stock").map(k=>[k.n+nota(k), fmtNum(sem.ind[k.id],k.money), dlt(k)]), {columnStyles:{1:{halign:"right"},2:{halign:"right"}}});
   if (r.extra && sem.extra.trim()){ titulo(r.extra.n); tabla(["Detalle"], [[sem.extra]]); }
